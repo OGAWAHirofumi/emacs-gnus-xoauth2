@@ -20,8 +20,8 @@
 
 ;;; Commentary:
 
-;; XOAUTH2 support for gnus based on auth-source-xoauth2.el.
-;; To enable XOAUTH2, add the following to .gnus.el
+;; XOAUTH2 support based on auth-source-xoauth2.el.  To enable
+;; XOAUTH2, add the following to .gnus.el
 ;;
 ;;   (require 'gnus-xoauth2)
 ;;   (gnus-xoauth2-enable)
@@ -34,7 +34,18 @@
 ;;      (nnimap-server-port "imaps")
 ;;      (nnimap-stream ssl))
 ;;
-;; This reads
+;; And "pass edit foo.gmail.com.gpg" to store OAUTH2 information to
+;; password-store.
+;;
+;;   <client-secret>
+;;   username: <client-id>
+;;   auth-url: <auth-url>
+;;   token-url: <token-url>
+;;   scope: <scope>
+;;
+;; [example auth-url, token-url, and scope are in `ext-ouath2-*-progs`]
+;;
+;; gnus-xoauth2.el reads
 ;;
 ;;     client-id, client-secret, auth-url, token-url, and scope
 ;;
@@ -48,24 +59,13 @@
 ;; 
 ;; 1. Go to the developer console, https://console.developers.google.com/project
 ;; 2. Create a new project (if necessary), and select it once created.
-;; 3. Select \"APIs & Services\" from the navigation menu.
-;; 4. Select \"Credentials\".
-;; 5. Create new credentials of type \"OAuth Client ID\".
-;; 6. Choose application type \"Other\".
+;; 3. Select "APIs & Services" from the navigation menu.
+;; 4. Select "Credentials".
+;; 5. Create new credentials of type "OAuth Client ID".
+;; 6. Choose application type "Other".
 ;; 7. Choose a name for the client.
 ;; 
-;; This should get you all the values."
-
-;;; Privacy Policy
-
-;; This is software, which allows users to XOAUTH2 authentication for
-;; IMAP and SMTP.
-;;
-;; During setup, This software may try to contact external DNS
-;; servers, and OAUTH2 servers to try and work the settings needed for
-;; your account.  This software stores OAUTH2 authentication
-;; information (OAUTH2 tokens) locally on your computer and does not
-;; transmit it other than OAUTH2 servers.
+;; This should get you all the values.
 
 ;;; Code:
 
@@ -181,9 +181,6 @@
   :type '(alist :key-type string :value-type list))
 
 ;; xoauth2 backend for auth-source
-;;
-;; client-id, client-secret, auth-url, token-url, and scope are
-;; stored in password-store.
 
 ;(defcustom auth-source-xoauth2-creds
 ;  '(("example.gmail.com"
