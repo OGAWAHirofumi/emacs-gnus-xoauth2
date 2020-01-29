@@ -110,6 +110,46 @@
    (t
     oauth2-token-file)))
 
+(defun ext-oauth2-refresh-access (token auth-url resource-url redirect-uri)
+  "Refresh OAuth access TOKEN.
+TOKEN should be obtained with `oauth2-request-access'."
+  (let* ((token-url (oauth2-token-token-url token))
+	 (client-id (oauth2-token-client-id token))
+	 (client-secret (oauth2-token-client-secret token))
+	 (response (oauth2-make-access-request
+                    token-url
+                    (concat "client_id=" client-id
+                            "&client_secret=" client-secret
+                            "&refresh_token=" (oauth2-token-refresh-token token)
+                            "&grant_type=refresh_token"))))
+    (if (not (assoc 'error response))
+	(setf (oauth2-token-access-token token)
+	      (cdr (assoc 'access_token response)))
+      ;; if refresh was error, restart from auth
+      ;; FIXME: should check detail of error
+      (let ((auth-token (oauth2-auth auth-url token-url
+				     client-id client-secret resource-url
+				     nil redirect-uri)))
+	(setf (oauth2-token-access-token token)
+	      (oauth2-token-access-token auth-token))
+	(setf (oauth2-token-refresh-token token)
+	      (oauth2-token-refresh-token auth-token))
+	(setf (oauth2-token-access-response token)
+	      (oauth2-token-access-response auth-token))))
+    ;; If the token has a plstore, update it
+    (let ((plstore (oauth2-token-plstore token)))
+      (when plstore
+	(plstore-put plstore (oauth2-token-plstore-id token)
+                     nil `(:access-token
+                           ,(oauth2-token-access-token token)
+                           :refresh-token
+                           ,(oauth2-token-refresh-token token)
+                           :access-response
+                           ,(oauth2-token-access-response token)
+                           ))
+	(plstore-save plstore)))
+    token))
+
 (defun ext-oauth2-auth-and-refresh (host user auth-url token-url resource-url
 					 client-id client-secret
 					 &optional redirect-uri)
@@ -119,7 +159,7 @@
 	 (plstore-encrypt-to ext-oauth2-encrypt-to)
 	 (token (oauth2-auth-and-store auth-url token-url resource-url
 				       client-id client-secret redirect-uri)))
-    (oauth2-refresh-access token)
+    (ext-oauth2-refresh-access token auth-url resource-url redirect-uri)
     token))
 
 (defun ext-oauth2-access-token (host user auth-url token-url resource-url
