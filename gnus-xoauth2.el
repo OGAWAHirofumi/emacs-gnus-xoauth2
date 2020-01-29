@@ -72,8 +72,6 @@
 (require 'cl-lib)
 (require 'auth-source-pass)
 (require 'oauth2)
-(require 'nnimap)
-(require 'smtpmail)
 
 (defgroup gnus-xoauth2 nil
   "XOAUTH2 support for gnus"
@@ -182,13 +180,13 @@
 
 ;; xoauth2 backend for auth-source
 
-;(defcustom auth-source-xoauth2-creds
-;  '(("example.gmail.com"
-;     (:auth-url "https://accounts.google.com/o/oauth2/v2/auth"
-;      :token-url "https://oauth2.googleapis.com/token"
-;      :scope "https://mail.google.com/"
-;      :client-id "<client-id.apps.googleusercontent.com>"
-;      :client-secret "<client-secret>")))
+;;(defcustom auth-source-xoauth2-creds
+;;  '(("example.gmail.com"
+;;     (:auth-url "https://accounts.google.com/o/oauth2/v2/auth"
+;;      :token-url "https://oauth2.googleapis.com/token"
+;;      :scope "https://mail.google.com/"
+;;      :client-id "<client-id.apps.googleusercontent.com>"
+;;      :client-secret "<client-secret>")))
 (defcustom auth-source-xoauth2-creds #'auth-source-xoauth2-pass-creds
   "A property list containing values for the following XOAuth2 keys:
 :auth-url, :token-url, :scope, :client-id, and :client-secret.
@@ -330,7 +328,9 @@ See `auth-source-search' for details on SPEC."
 				user access-token)
 			t))
 
-;; Add functionality to nnimap-login
+(defvar nnimap-authenticator)
+(declare-function nnimap-command "nnimap" (&rest args))
+(declare-function nnimap-capability "nnimap" (capability))
 (defun gnus-xoauth2-nnimap-login (fn user password)
   (if (and (eq nnimap-authenticator 'xoauth2)
 	   (nnimap-capability "AUTH=XOAUTH2")
@@ -339,7 +339,9 @@ See `auth-source-search' for details on SPEC."
 		      (gnus-xoauth2-token user password))
     (funcall fn user password)))
 
-;; Add the functionality to smtpmail-try-auth-method
+(defvar smtpmail-auth-supported)
+(declare-function smtpmail-command-or-throw "smtpmail"
+		  (process string &optional code))
 (cl-defmethod smtpmail-try-auth-method
   (process (_mech (eql xoauth2)) user password)
   (smtpmail-command-or-throw
@@ -351,13 +353,18 @@ See `auth-source-search' for details on SPEC."
 (defun gnus-xoauth2-enable ()
   "Enable auth-source-xoauth2."
   (interactive)
+
+  ;; Add functionality to nnimap-login
+  (with-eval-after-load "nnimap"
+    (advice-add 'nnimap-login :around #'gnus-xoauth2-nnimap-login))
+  ;; Add the functionality to smtpmail-try-auth-method
+  (with-eval-after-load "smtpmail"
+    (add-to-list 'smtpmail-auth-supported 'xoauth2))
+
   ;; To add password-store to the list of sources, evaluate the following:
   (add-to-list 'auth-sources 'xoauth2)
   ;; clear the cache (required after each change to #'auth-source-pass-search)
-  (auth-source-forget-all-cached)
-
-  (advice-add 'nnimap-login :around #'gnus-xoauth2-nnimap-login)
-  (add-to-list 'smtpmail-auth-supported 'xoauth2))
+  (auth-source-forget-all-cached))
 
 (provide 'gnus-xoauth2)
 ;;; gnus-xoauth2.el ends here
