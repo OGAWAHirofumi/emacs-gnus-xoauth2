@@ -328,15 +328,43 @@ See `auth-source-search' for details on SPEC."
 				user access-token)
 			t))
 
+(defvar nnimap-object)
+(declare-function nnimap-wait-for-line "nnimap"
+		  (regexp &optional response-regexp))
+(declare-function nnimap-send-command "nnimap" (&rest args))
+(declare-function nnimap-get-response "nnimap" (sequence))
+(declare-function nnimap-newlinep "nnimap" (object))
+(declare-function nnheader-report "nnheader" (backend &rest args))
+(defun gnus-xoauth2-nnimap-xoauth-command (user access-token)
+  "Send XOAUTH2 command with USER and ACCESS-TOKEN."
+  (erase-buffer)
+  (let ((sequence (nnimap-send-command "AUTHENTICATE XOAUTH2 %s"
+				       (gnus-xoauth2-token user access-token)))
+	(challenge (nnimap-wait-for-line "^\\(.*\\)\n")))
+    ;; on error response, "+ <base64 string>".
+    (if (not (string-match "^\\+ [a-zA-Z0-9+/=]+" challenge))
+	(cons t (nnimap-get-response sequence))
+      ;; send empty response on error
+      (let (response)
+	(erase-buffer)
+	(process-send-string (get-buffer-process (current-buffer))
+			     (if (nnimap-newlinep nnimap-object)
+				 "\n"
+			       "\r\n"))
+	(setq response (nnimap-get-response sequence))
+	(nnheader-report 'nnimap "%s"
+			 (mapconcat (lambda (a)
+				      (format "%s" a))
+				    (car response) " "))
+	nil))))
+
 (defvar nnimap-authenticator)
-(declare-function nnimap-command "nnimap" (&rest args))
 (declare-function nnimap-capability "nnimap" (capability))
 (defun gnus-xoauth2-nnimap-login (fn user password)
   (if (and (eq nnimap-authenticator 'xoauth2)
 	   (nnimap-capability "AUTH=XOAUTH2")
 	   (nnimap-capability "SASL-IR"))
-      (nnimap-command "AUTHENTICATE XOAUTH2 %s"
-		      (gnus-xoauth2-token user password))
+      (gnus-xoauth2-nnimap-xoauth-command user password)
     (funcall fn user password)))
 
 (defvar smtpmail-auth-supported)
