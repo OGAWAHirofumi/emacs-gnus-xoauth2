@@ -43,7 +43,7 @@
 ;;   token-url: <token-url>
 ;;   scope: <scope>
 ;;
-;; [example auth-url, token-url, and scope are in `ext-ouath2-*-progs`]
+;; [example of auth-url, token-url, and scope are in `oauth2-ext.el`]
 ;;
 ;; gnus-xoauth2.el reads
 ;;
@@ -71,154 +71,12 @@
 
 (require 'cl-lib)
 (require 'auth-source-pass)
-(require 'oauth2)
+(require 'oauth2-ext)
 
 (defgroup gnus-xoauth2 nil
   "XOAUTH2 support for gnus"
   :version "28.1"
-  :group 'files)
-
-;; Helpers for oauth2.el to support per-account plstore
-
-(defcustom ext-oauth2-plstore-dir (concat user-emacs-directory "oauth2")
-  "Directory to store encrypted OAUTH2 credential."
-  :type 'string)
-
-(defun ext-oauth2-pass-gpg-id ()
-  "Get gpg id from password-store's .gpg-id."
-  (let ((gpg-id (concat auth-source-pass-filename "/.gpg-id")))
-    (when (file-exists-p gpg-id)
-      (with-temp-buffer
-	(insert-file-contents-literally gpg-id)
-	(car (split-string (buffer-string) "\n" t))))))
-
-(defcustom ext-oauth2-encrypt-to (or (ext-oauth2-pass-gpg-id)
-				     plstore-encrypt-to)
-  "Recipient(s) used for encrypting secret entries."
-  :type 'file)
-
-(defun ext-oauth2-plstore-file (host user)
-  "Path of plstore file for HOST and USER."
-  ;; Key is both of plstore's key (auth-url+token-url+scope) and
-  ;; filename (i.e. if <user> is non-nil, <user>.plstore).  So the key
-  ;; should be enough unique usually for usage.
-  (cond
-   (user
-    (concat ext-oauth2-plstore-dir (format "/%s.plstore" user)))
-   (host
-    (concat ext-oauth2-plstore-dir (format "/%s.plstore" host)))
-   (t
-    oauth2-token-file)))
-
-(defun ext-oauth2-refresh-access (token auth-url resource-url redirect-uri)
-  "Refresh OAuth access TOKEN.
-TOKEN should be obtained with `oauth2-request-access'."
-  (let* ((token-url (oauth2-token-token-url token))
-	 (client-id (oauth2-token-client-id token))
-	 (client-secret (oauth2-token-client-secret token))
-	 (response (oauth2-make-access-request
-                    token-url
-                    (concat "client_id=" client-id
-                            "&client_secret=" client-secret
-                            "&refresh_token=" (oauth2-token-refresh-token token)
-                            "&grant_type=refresh_token"))))
-    (if (not (assoc 'error response))
-	(setf (oauth2-token-access-token token)
-	      (cdr (assoc 'access_token response)))
-      ;; if refresh was error, restart from auth
-      ;; FIXME: should check detail of error
-      (let ((auth-token (oauth2-auth auth-url token-url
-				     client-id client-secret resource-url
-				     nil redirect-uri)))
-	(setf (oauth2-token-access-token token)
-	      (oauth2-token-access-token auth-token))
-	(setf (oauth2-token-refresh-token token)
-	      (oauth2-token-refresh-token auth-token))
-	(setf (oauth2-token-access-response token)
-	      (oauth2-token-access-response auth-token))))
-    ;; If the token has a plstore, update it
-    (let ((plstore (oauth2-token-plstore token)))
-      (when plstore
-	(plstore-put plstore (oauth2-token-plstore-id token)
-                     nil `(:access-token
-                           ,(oauth2-token-access-token token)
-                           :refresh-token
-                           ,(oauth2-token-refresh-token token)
-                           :access-response
-                           ,(oauth2-token-access-response token)
-                           ))
-	(plstore-save plstore)))
-    token))
-
-(defun ext-oauth2-auth-and-refresh (host user auth-url token-url resource-url
-					 client-id client-secret
-					 &optional redirect-uri)
-  "Setup environment for HOST, then get and refresh access-token."
-  (let* ((make-backup-files nil)
-	 (oauth2-token-file (ext-oauth2-plstore-file host user))
-	 (plstore-encrypt-to ext-oauth2-encrypt-to)
-	 (token (oauth2-auth-and-store auth-url token-url resource-url
-				       client-id client-secret redirect-uri)))
-    (ext-oauth2-refresh-access token auth-url resource-url redirect-uri)
-    token))
-
-(defun ext-oauth2-access-token (host user auth-url token-url resource-url
-				     client-id client-secret)
-  "Get access token for OAUTH2."
-  (let ((token (ext-oauth2-auth-and-refresh host user
-					    auth-url token-url resource-url
-					    client-id client-secret)))
-    (oauth2-token-access-token token)))
-
-(defconst ext-oauth2-gmail-props
-  ;; Get from
-  ;; https://accounts.google.com/.well-known/openid-configuration and
-  ;; https://developers.google.com/identity/protocols/googlescopes
-  '(:auth-url "https://accounts.google.com/o/oauth2/v2/auth"
-	      :token-url "https://oauth2.googleapis.com/token"
-	      :scope "https://mail.google.com/"))
-(defconst ext-oauth2-mail-ru-props
-  '(:auth-url "https://o2.mail.ru/login"
-	      :token-url "https://o2.mail.ru/token"
-	      :scope "mail.imap"))
-(defconst ext-oauth2-yandex-imap-props
-  '(:auth-url "https://oauth.yandex.com/authorize"
-	      :token-url "https://oauth.yandex.com/token"
-	      :scope "mail:imap_full"))
-(defconst ext-oauth2-yandex-smtp-props
-  '(:auth-url "https://oauth.yandex.com/authorize"
-	      :token-url "https://oauth.yandex.com/token"
-	      :scope "mail:smtp"))
-(defconst ext-oauth2-yahoo-com-props
-  '(:auth-url "https://api.login.yahoo.com/oauth2/request_auth"
-	      :token-url "https://api.login.yahoo.com/oauth2/get_token"
-	      :scope "mail-w"))
-(defconst ext-oauth2-aol-props
-  '(:auth-url "https://api.login.aol.com/oauth2/request_auth"
-	      :token-url "https://api.login.aol.com/oauth2/get_token"
-	      :scope "mail-w"))
-
-(defcustom ext-oauth2-issuers-alist
-  `(("imap.googlemail.com" . ,ext-oauth2-gmail-props)
-    ("smtp.googlemail.com" . ,ext-oauth2-gmail-props)
-    ("imap.gmail.com" . ,ext-oauth2-gmail-props)
-    ("smtp.gmail.com" . ,ext-oauth2-gmail-props)
-
-    ("imap.mail.ru" . ,ext-oauth2-mail-ru-props)
-    ("smtp.mail.ru" . ,ext-oauth2-mail-ru-props)
-
-    ("imap.yandex.com" . ,ext-oauth2-yandex-imap-props)
-    ("smtp.yandex.com" . ,ext-oauth2-yandex-smtp-props)
-
-    ("imap.mail.yahoo.com" . ,ext-oauth2-yahoo-com-props)
-    ("smtp.mail.yahoo.com" . ,ext-oauth2-yahoo-com-props)
-
-    ("imap.aol.com" . ,ext-oauth2-aol-props)
-    ("smtp.aol.com" . ,ext-oauth2-aol-props))
-  "The alist of endpoint URLs for OAUTH2."
-  :type '(alist :key-type string :value-type list))
-
-;; xoauth2 backend for auth-source
+  :group 'mail)
 
 ;;(defcustom auth-source-xoauth2-creds
 ;;  '(("example.gmail.com"
@@ -226,7 +84,7 @@ TOKEN should be obtained with `oauth2-request-access'."
 ;;      :token-url "https://oauth2.googleapis.com/token"
 ;;      :scope "https://mail.google.com/"
 ;;      :client-id "<client-id.apps.googleusercontent.com>"
-;;      :client-secret "<client-secret>")))
+;;      :client-secret "<client-secret>"))))
 (defcustom auth-source-xoauth2-creds #'auth-source-xoauth2-pass-creds
   "A property list containing values for the following XOAuth2 keys:
 :auth-url, :token-url, :scope, :client-id, and :client-secret.
@@ -324,9 +182,9 @@ which are used to build and return the property list required by
                (client-secret (plist-get token :client-secret)))
       (list :host host :port port :user user
 	    :secret (lambda ()
-		      (ext-oauth2-access-token host user
-					       auth-url token-url scope
-					       client-id client-secret))))))
+		      (oauth2-ext-access-token auth-url token-url scope
+					       client-id client-secret nil
+					       (or user host)))))))
 
 (cl-defun auth-source-xoauth2-search (&rest spec
                                             &key backend type host user port
