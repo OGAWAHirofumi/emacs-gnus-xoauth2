@@ -21,8 +21,8 @@
 ;;; Commentary:
 
 ;; Extending oauth2.el to support multi-account, plstore encrypt key,
-;; error handling, mini-httpd for redirect-uri, PKCE protocol, and
-;; password-store.
+;; error handling, mini-httpd for redirect-uri, random state and
+;; verify, PKCE protocol, and password-store.
 
 ;;; Code:
 
@@ -52,6 +52,10 @@
 May either be a string or a list of strings.  If it is nil,
 symmetric encryption will be used."
   :type '(choice (const nil) (repeat :tag "Recipient(s)" string)))
+
+(defcustom oauth2-ext-use-random-state t
+  "If non-nil, add random state to authz request."
+  :type 'boolean)
 
 (defcustom oauth2-ext-use-pkce t
   "If non-nil, use PKCE protocol."
@@ -277,6 +281,12 @@ Return an `oauth2-token' structure."
                          :token-url token-url
                          :access-response result))))
 
+(defun oauth2-ext-make-random-state ()
+  "Make random state string for authz request."
+  (secure-hash 'sha256 (let (vec)
+			 (concat (dotimes (_i 32 vec)
+				   (push (random 255) vec))))))
+
 (defun oauth2-ext-pkce-make-verifier (length)
   "Make PKCE code verifier string for LENGTH."
   (random t)
@@ -306,6 +316,8 @@ Return an `oauth2-token' structure."
 	 (verifier (and oauth2-ext-use-pkce
 			(oauth2-ext-pkce-make-verifier
 			 oauth2-ext-pkce-verifier-length)))
+	 (state (or state (and oauth2-ext-use-random-state
+			       (oauth2-ext-make-random-state))))
 	 (challenge (and verifier
 			 (oauth2-ext-pkce-make-challenge verifier)))
 	 (challenge-method (and challenge oauth2-ext-pkce-challenge-method))
@@ -319,7 +331,11 @@ Return an `oauth2-token' structure."
 		       challenge challenge-method)
 		      (cond
 		       (serv-proc
-			(let ((response (oauth2-httpd-wait-response serv-proc)))
+			(let* ((response (oauth2-httpd-wait-response serv-proc))
+			       (res-state (nth 1 (assoc "state" response))))
+			  (when (and state (or (null res-state)
+					       (not (string= state res-state))))
+			    (user-error "Failed verify of OAuth2 authz response state"))
 			  (nth 1 (assoc "code" response))))
 		       (t
 			(read-string oauth2-ext-auth-prompt))))))
