@@ -182,11 +182,13 @@ which are used to build and return the property list required by
                (client-secret (plist-get token :client-secret)))
       (list :host host :port port :user user
 	    :secret (lambda ()
-		      (let ((oauth2-httpd-response-title
-			     (format "OAuth2 response for %s" (or user host))))
+		      (let* ((key (or user host))
+			     (oauth2-httpd-response-title
+			      (format "OAuth2 response for %s" key)))
+			(message "Getting OAuth2 token for %s..." key)
 			(oauth2-ext-access-token auth-url token-url scope
 						 client-id client-secret nil
-						 (or user host))))))))
+						 key)))))))
 
 (cl-defun auth-source-xoauth2-search (&rest spec
                                             &key backend type host user port
