@@ -52,6 +52,10 @@ May either be a string or a list of strings.  If it is nil,
 symmetric encryption will be used."
   :type '(choice (const nil) (repeat :tag "Recipient(s)" string)))
 
+(defcustom oauth2-httpd-response-title "OAuth2 response"
+  "Title of authorization response used by `oauth2-httpd-auth-response-default'."
+  :type 'string)
+
 (defcustom oauth2-httpd-make-html #'oauth2-httpd-auth-response-default
   "Function to make html content to response to redirected authz code."
   :type 'function)
@@ -144,11 +148,10 @@ symmetric encryption will be used."
 
 (defun oauth2-httpd-auth-response-default (query-alist)
   "Make html content to response to CLIENT from QUERY-ALIST."
-  (let ((title "OAuth2 response")
-	(msg (if (assoc "code" query-alist)
+  (let ((msg (if (assoc "code" query-alist)
 		 "success"
 	       (or (nth 1 (assoc "error" query-alist)) "error"))))
-    (format oauth2-httpd-html-template title msg)))
+    (format oauth2-httpd-html-template oauth2-httpd-response-title msg)))
 
 (defun oauth2-httpd-auth-response (client query-alist)
   "Send response to CLIENT process from QUERY-ALIST."
