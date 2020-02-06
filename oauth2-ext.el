@@ -21,7 +21,8 @@
 ;;; Commentary:
 
 ;; Extending oauth2.el to support multi-account, plstore encrypt key,
-;; error handling, mini-httpd for redirect-uri, and password-store.
+;; error handling, mini-httpd for redirect-uri, PKCE protocol, and
+;; password-store.
 
 ;;; Code:
 
@@ -51,6 +52,14 @@
 May either be a string or a list of strings.  If it is nil,
 symmetric encryption will be used."
   :type '(choice (const nil) (repeat :tag "Recipient(s)" string)))
+
+(defcustom oauth2-ext-use-pkce t
+  "If non-nil, use PKCE protocol."
+  :type 'boolean)
+
+(defcustom oauth2-ext-pkce-verifier-length 64
+  "Length of PKCE code verifier (must be >= 43)."
+  :type 'boolean)
 
 (defcustom oauth2-httpd-response-title "OAuth2 response"
   "Title of authorization response used by `oauth2-httpd-auth-response-default'."
@@ -214,17 +223,23 @@ symmetric encryption will be used."
   "Redirect URI for Programmatic extraction.")
 
 (defun oauth2-ext-request-authorization (auth-url client-id
-						  &optional scope state redirect-uri)
+						  &optional scope state
+						  redirect-uri
+						  challenge challenge-method)
   "Request OAuth authorization at AUTH-URL by launching `browse-url'.
 CLIENT-ID is the client id provided by the provider.
 SCOPE is the list of resource scopes.
 REDIRECT-URI is uri how to get response from browser. If
-REDIRECT-URI is nil, `oauth2-ext-redirect-uri-manual' is used."
+REDIRECT-URI is nil, `oauth2-ext-redirect-uri-manual' is used.
+If CHALLENGE and CHALLENGE-METHOD is non-nil, set PKCE protocol parameters."
   (browse-url (concat auth-url
 		      (if (string-match-p "\?" auth-url) "&" "?")
 		      "client_id=" (url-hexify-string client-id)
 		      "&response_type=code"
 		      "&redirect_uri=" (url-hexify-string redirect-uri)
+		      (and challenge challenge-method
+			   (concat "&code_challenge=" challenge
+				   "&code_challenge_method=" challenge-method))
 		      (and scope
 			   (concat "&scope=" (url-hexify-string scope)))
 		      (and state
@@ -239,31 +254,82 @@ This allows to store the token in an unique way."
 
 (defvar oauth2-ext-auth-prompt "Enter the code your browser displayed: ")
 
+(defun oauth2-ext-request-access (token-url client-id client-secret code
+					    &optional redirect-uri code-verifier)
+  "Request OAuth2 access at TOKEN-URL.
+The CODE should be obtained with `oauth2-request-authorization'.
+Return an `oauth2-token' structure."
+  (when code
+    (let ((result
+           (oauth2-make-access-request
+            token-url
+            (concat
+             "client_id=" client-id
+             "&client_secret=" client-secret
+             "&code=" code
+             "&redirect_uri=" (url-hexify-string (or redirect-uri "urn:ietf:wg:oauth:2.0:oob"))
+	     (and code-verifier (concat "&code_verifier=" code-verifier))
+             "&grant_type=authorization_code"))))
+      (make-oauth2-token :client-id client-id
+                         :client-secret client-secret
+                         :access-token (cdr (assoc 'access_token result))
+                         :refresh-token (cdr (assoc 'refresh_token result))
+                         :token-url token-url
+                         :access-response result))))
+
+(defun oauth2-ext-pkce-make-verifier (length)
+  "Make PKCE code verifier string for LENGTH."
+  (random t)
+  (let ((limit (- ?~ ?-))
+	vec)
+    (while (< (length vec) length)
+      (let ((c (+ (random limit) ?-)))
+	(when (or (and (<= ?0 c) (<= c ?9))
+		  (and (<= ?A c) (<= c ?Z))
+		  (and (<= ?a c) (<= c ?z))
+		  (= c ?-) (= c ?.) (= c ?_) (= c ?~))
+	  (push c vec))))
+    (concat vec)))
+
+(defvar oauth2-ext-pkce-challenge-method "S256")
+
+(defun oauth2-ext-pkce-make-challenge (verifier)
+  "Make PKCE code challenge from VERIFIER."
+  (base64url-encode-string
+   (secure-hash 'sha256 verifier nil nil t) t))
+
 ;;;###autoload
 (defun oauth2-ext-auth (auth-url token-url client-id client-secret
 				 &optional scope state redirect-uri)
   "Authenticate application via OAuth2."
   (let* ((serv-proc (or redirect-uri (oauth2-httpd-start)))
+	 (verifier (and oauth2-ext-use-pkce
+			(oauth2-ext-pkce-make-verifier
+			 oauth2-ext-pkce-verifier-length)))
+	 (challenge (and verifier
+			 (oauth2-ext-pkce-make-challenge verifier)))
+	 (challenge-method (and challenge oauth2-ext-pkce-challenge-method))
 	 (redirect-uri (or redirect-uri
 			   (format "http://localhost:%d%s"
 				   (process-contact serv-proc :service)
 				   oauth2-httpd-callback-path)))
 	 (auth-code (progn
-		      (oauth2-ext-request-authorization auth-url client-id
-							scope state
-							redirect-uri)
+		      (oauth2-ext-request-authorization
+		       auth-url client-id scope state redirect-uri
+		       challenge challenge-method)
 		      (cond
 		       (serv-proc
 			(let ((response (oauth2-httpd-wait-response serv-proc)))
 			  (nth 1 (assoc "code" response))))
 		       (t
 			(read-string oauth2-ext-auth-prompt))))))
-    (oauth2-request-access
+    (oauth2-ext-request-access
      token-url
      client-id
      client-secret
      auth-code
-     redirect-uri)))
+     redirect-uri
+     verifier)))
 
 (defun oauth2-ext-auth-and-store (auth-url token-url resource-url
 					   client-id client-secret
