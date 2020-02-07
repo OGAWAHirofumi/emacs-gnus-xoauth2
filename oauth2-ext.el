@@ -283,14 +283,16 @@ Return an `oauth2-token' structure."
 
 (defun oauth2-ext-make-random-state ()
   "Make random state string for authz request."
-  (secure-hash 'sha256 (let (vec)
-			 (concat (dotimes (_i 32 vec)
-				   (push (random 255) vec))))))
+  (if (featurep 'gnutls)
+      (secure-hash 'sha256 'iv-auto 64)
+    (secure-hash 'sha256 (let (vec)
+			   (concat (dotimes (_i 64 vec)
+				     (push (random 256) vec)))))))
 
 (defun oauth2-ext-pkce-make-verifier (length)
   "Make PKCE code verifier string for LENGTH."
   (random t)
-  (let ((limit (- ?~ ?-))
+  (let ((limit (+ (- ?~ ?-) 1))
 	vec)
     (while (< (length vec) length)
       (let ((c (+ (random limit) ?-)))
