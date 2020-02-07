@@ -283,7 +283,7 @@ Return an `oauth2-token' structure."
 
 (defun oauth2-ext-make-random-state ()
   "Make random state string for authz request."
-  (if (featurep 'gnutls)
+  (if (and (fboundp 'gnutls-available-p) (memq 'gnutls3 (gnutls-available-p)))
       (secure-hash 'sha256 'iv-auto 64)
     (secure-hash 'sha256 (let (vec)
 			   (concat (dotimes (_i 64 vec)
