@@ -194,7 +194,7 @@ symmetric encryption will be used."
 		     (if (or (null request) (null req-method) (null req-path)
 			     (not (string= req-method "GET"))
 			     (not (string= oauth2-httpd-callback-path path)))
-			 (oauth2-httpd-send-404 proc)		       
+			 (oauth2-httpd-send-404 proc)
 		       (oauth2-httpd-auth-response proc query-alist)
 		       (process-put serv-proc :response query-alist))
 		     (delete-process proc))))
@@ -233,7 +233,8 @@ symmetric encryption will be used."
   "Request OAuth authorization at AUTH-URL by launching `browse-url'.
 CLIENT-ID is the client id provided by the provider.
 SCOPE is the list of resource scopes.
-REDIRECT-URI is uri how to get response from browser. If
+STATE is to keep some object for CRLF attack.
+REDIRECT-URI is uri how to get response from browser.  If
 REDIRECT-URI is nil, `oauth2-ext-redirect-uri-manual' is used.
 If CHALLENGE and CHALLENGE-METHOD is non-nil, set PKCE protocol parameters."
   (browse-url (concat auth-url
