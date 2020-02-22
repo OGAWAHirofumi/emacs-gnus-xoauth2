@@ -235,7 +235,7 @@ See `auth-source-search' for details on SPEC."
 		  (regexp &optional response-regexp))
 (declare-function nnimap-send-command "nnimap" (&rest args))
 (declare-function nnimap-get-response "nnimap" (sequence))
-(declare-function nnimap-newlinep "nnimap" (object))
+(declare-function nnimap-newlinep "nnimap" (object) t)
 (declare-function nnheader-report "nnheader" (backend &rest args))
 (defun gnus-xoauth2-nnimap-xoauth-command (user access-token)
   "Send XOAUTH2 command with USER and ACCESS-TOKEN."
