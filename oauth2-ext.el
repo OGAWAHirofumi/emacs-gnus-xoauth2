@@ -238,7 +238,7 @@ REDIRECT-URI is uri how to get response from browser.  If
 REDIRECT-URI is nil, `oauth2-ext-redirect-uri-manual' is used.
 If CHALLENGE and CHALLENGE-METHOD is non-nil, set PKCE protocol parameters."
   (browse-url (concat auth-url
-		      (if (string-match-p "\?" auth-url) "&" "?")
+		      (if (string-match-p "\\?" auth-url) "&" "?")
 		      "client_id=" (url-hexify-string client-id)
 		      "&response_type=code"
 		      "&redirect_uri=" (url-hexify-string redirect-uri)
