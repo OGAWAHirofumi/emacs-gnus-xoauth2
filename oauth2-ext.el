@@ -251,11 +251,13 @@ If CHALLENGE and CHALLENGE-METHOD is non-nil, set PKCE protocol parameters."
 			   (concat "&state=" (url-hexify-string state))))))
 
 (defun oauth2-ext-compute-id (auth-url token-url resource-url
-				       &rest keys)
+				       &optional keys)
   "Compute an unique id based on URLs.
-The unique id is made from AUTH-URL, TOKEN-URL, RESOURCE-URL, and KEYS.
-This allows to store the token in an unique way."
-  (secure-hash 'md5 (apply #'concat auth-url token-url resource-url keys)))
+The unique id is made from AUTH-URL, TOKEN-URL, RESOURCE-URL, and
+KEYS.  KEYS are arbitrary string or list of string.  This allows
+to store the token in an unique way."
+  (let ((keys (if (listp keys) keys (list keys))))
+    (secure-hash 'md5 (apply #'concat auth-url token-url resource-url keys))))
 
 (defvar oauth2-ext-auth-prompt "Enter the code your browser displayed: ")
 
@@ -352,8 +354,7 @@ Return an `oauth2-token' structure."
 
 (defun oauth2-ext-auth-and-store (auth-url token-url resource-url
 					   client-id client-secret
-					   &optional redirect-uri
-					   &rest keys)
+					   &optional redirect-uri keys)
   "Request access to a resource and store it using `plstore'.
 
 AUTH-URL, TOKEN-URL, RESOURCE-URL, CLIENT-ID, CLIENT-SECRET,
@@ -363,8 +364,7 @@ identified by AUTH-URL, TOKEN-URL, RESOURCE-URL, and KEYS."
   (let* ((make-backup-files nil)
 	 (plstore-encrypt-to oauth2-ext-encrypt-to)
 	 (plstore (plstore-open oauth2-token-file))
-         (id (apply #'oauth2-ext-compute-id
-		    auth-url token-url resource-url keys))
+         (id (oauth2-ext-compute-id auth-url token-url resource-url keys))
          (plist (cdr (plstore-get plstore id))))
     ;; Check if we found something matching this access
     (if plist
@@ -438,32 +438,30 @@ should be obtained with `oauth2-request-access'."
 
 (defun oauth2-ext-auth-or-refresh (auth-url token-url resource-url client-id
 					    client-secret
-					    &optional redirect-uri
-					    &rest keys)
+					    &optional redirect-uri keys)
   "Make new token or read stored token, then refresh.
 
 AUTH-URL, TOKEN-URL, RESOURCE-URL, CLIENT-ID, CLIENT-SECRET,
 REDIRECT-URI are used for OAUTH2 protocol.  Stored token are
 identified by AUTH-URL, TOKEN-URL, RESOURCE-URL, and KEYS."
-  (let ((token (apply #'oauth2-ext-auth-and-store
-		      auth-url token-url resource-url client-id client-secret
-		      redirect-uri keys)))
+  (let ((token (oauth2-ext-auth-and-store auth-url token-url resource-url
+					  client-id client-secret
+					  redirect-uri keys)))
     (oauth2-ext-refresh-access token auth-url resource-url redirect-uri)
     token))
 
 ;;;###autoload
 (defun oauth2-ext-access-token (auth-url token-url resource-url
 					 client-id client-secret
-					 &optional redirect-uri
-					 &rest keys)
+					 &optional redirect-uri keys)
   "Get access token for OAUTH2.
 
 AUTH-URL, TOKEN-URL, RESOURCE-URL, CLIENT-ID, CLIENT-SECRET,
 REDIRECT-URI are used for OAUTH2 protocol.  Stored token are
 identified by AUTH-URL, TOKEN-URL, RESOURCE-URL, and KEYS."
-  (let ((token (apply #'oauth2-ext-auth-or-refresh
-		      auth-url token-url resource-url client-id client-secret
-		      redirect-uri keys)))
+  (let ((token (oauth2-ext-auth-or-refresh auth-url token-url resource-url
+					   client-id client-secret
+					   redirect-uri keys)))
     (oauth2-token-access-token token)))
 
 (defconst oauth2-ext-gmail-props
