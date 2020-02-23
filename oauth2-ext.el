@@ -250,14 +250,15 @@ If CHALLENGE and CHALLENGE-METHOD is non-nil, set PKCE protocol parameters."
 		      (and state
 			   (concat "&state=" (url-hexify-string state))))))
 
-(defun oauth2-ext-compute-id (auth-url token-url resource-url
-				       &optional keys)
+(defun oauth2-ext-compute-id (client-id auth-url token-url resource-url
+					&optional keys)
   "Compute an unique id based on URLs.
-The unique id is made from AUTH-URL, TOKEN-URL, RESOURCE-URL, and
-KEYS.  KEYS are arbitrary string or list of string.  This allows
-to store the token in an unique way."
+The unique id is made from CLIENT-ID, AUTH-URL, TOKEN-URL,
+RESOURCE-URL, and KEYS.  KEYS are arbitrary string or list of
+string.  This allows to store the token in an unique way."
   (let ((keys (if (listp keys) keys (list keys))))
-    (secure-hash 'md5 (apply #'concat auth-url token-url resource-url keys))))
+    (secure-hash 'md5 (apply #'concat client-id auth-url token-url resource-url
+			     keys))))
 
 (defvar oauth2-ext-auth-prompt "Enter the code your browser displayed: ")
 
@@ -364,7 +365,8 @@ identified by AUTH-URL, TOKEN-URL, RESOURCE-URL, and KEYS."
   (let* ((make-backup-files nil)
 	 (plstore-encrypt-to oauth2-ext-encrypt-to)
 	 (plstore (plstore-open oauth2-token-file))
-         (id (oauth2-ext-compute-id auth-url token-url resource-url keys))
+         (id (oauth2-ext-compute-id client-id auth-url token-url resource-url
+				    keys))
          (plist (cdr (plstore-get plstore id))))
     ;; Check if we found something matching this access
     (if plist
