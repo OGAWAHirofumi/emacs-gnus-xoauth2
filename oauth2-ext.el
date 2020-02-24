@@ -368,11 +368,11 @@ KEYS are arbitrary string or list of string.  This allows to
 store the token in an unique way."
   plstore-id
   plstore
-  (client-id :read-only t)
-  (client-secret :read-only t)
-  (auth-url :read-only t)
-  (token-url :read-only t)
-  (scope :read-only t)
+  (client-id nil :read-only t)
+  (client-secret nil :read-only t)
+  (auth-url nil :read-only t)
+  (token-url nil :read-only t)
+  (scope nil :read-only t)
   redirect-uri)
 
 (defun oauth2-ext-session-plstore-open (session)
