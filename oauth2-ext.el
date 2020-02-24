@@ -472,6 +472,8 @@ EXTRA is a list of extra query parameters that is passed to
 	(when (and state (or (null res-state)
 			     (not (string= state res-state))))
 	  (error "OAuth2 failed verify of authz response state"))
+	(when-let ((errcode (assoc "error" response)))
+	  (error "OAuth2 authz response error: %s" errcode))
 	(nth 1 (assoc "code" response))))
      (t
       (read-string oauth2-ext-auth-prompt)))))
