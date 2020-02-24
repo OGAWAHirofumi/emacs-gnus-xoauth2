@@ -321,6 +321,18 @@ EXTRA is a list of extra query parameters that is passed to
 		 ,@extra)))
     (oauth2-ext-make-access-request token-url (url-build-query-string query))))
 
+(defun oauth2-ext-request-revoke (revoke-url token &optional token-type extra)
+  "Request OAuth2 revoke token at REVOKE-URL.
+
+TOKEN is the access-token or refresh-token.
+TOKEN-TYPE is the access_token or refresh_token.
+EXTRA is a list of extra query parameters that is passed to
+`url-build-query-string'."
+  (let ((query `((token ,token)
+		 ,@(and token-type `((token_type_hint ,token-type)))
+		 ,@extra)))
+    (oauth2-ext-make-access-request revoke-url (url-build-query-string query))))
+
 (defun oauth2-ext-make-random-state ()
   "Make random state string for authz request."
   (if (and (fboundp 'gnutls-available-p) (memq 'gnutls3 (gnutls-available-p)))
