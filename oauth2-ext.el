@@ -471,7 +471,7 @@ EXTRA is a list of extra query parameters that is passed to
 	     (res-state (nth 1 (assoc "state" response))))
 	(when (and state (or (null res-state)
 			     (not (string= state res-state))))
-	  (user-error "Failed verify of OAuth2 authz response state"))
+	  (error "OAuth2 failed verify of authz response state"))
 	(nth 1 (assoc "code" response))))
      (t
       (read-string oauth2-ext-auth-prompt)))))
@@ -498,18 +498,22 @@ STATE is an arbitrary string to keep some object for CRLF attack."
   "Request access/refresh token and store it by using `plstore'.
 If there is stored token, read it instead of requesting.
 
-SESSION is session structure made by `oauth2-ext-session-make'."
+SESSION is session structure made by `oauth2-ext-session-make'.
+Return nil if succeed, otherwise error response."
   (let ((response (oauth2-ext-auth session)))
-    ;; FIXME: error handling
-    (oauth2-ext-session-update-plstore session
-				       (cdr (assoc 'access_token response))
-				       (cdr (assoc 'refresh_token response))
-				       response)))
+    (if (assoc 'error response)
+	response
+      (let ((access-token (cdr (assoc 'access_token response)))
+	    (refresh-token (cdr (assoc 'refresh_token response))))
+	(oauth2-ext-session-update-plstore session access-token refresh-token
+					   response)
+	nil))))
 
 (defun oauth2-ext-refresh (session)
   "Refresh OAUTH2 access token.
 
-SESSION is session structure made by `oauth2-ext-session-make'."
+SESSION is session structure made by `oauth2-ext-session-make'.
+Return nil if succeed, otherwise error response."
   (let* ((token-url (oauth2-ext-session-token-url session))
 	 (client-id (oauth2-ext-session-client-id session))
 	 (client-secret (oauth2-ext-session-client-secret session))
@@ -517,23 +521,22 @@ SESSION is session structure made by `oauth2-ext-session-make'."
 	 (refresh-token (plist-get plist :refresh-token))
 	 (response (oauth2-ext-request-refresh token-url client-id client-secret
 					       refresh-token)))
-    (if (not (assoc 'error response))
-	;; Success
-	(oauth2-ext-session-update-plstore session
-					   (cdr (assoc 'access_token response))
-					   nil nil)
-      ;; If refresh was error, restart from `oauth2-ext-auth'
-      ;; FIXME: should check detail of error
-      (oauth2-ext-auth-and-store session))))
+    (if (assoc 'error response)
+	response
+      ;; Success
+      (let ((access-token (cdr (assoc 'access_token response))))
+	(oauth2-ext-session-update-plstore session access-token nil nil)
+	nil))))
 
 (defun oauth2-ext-auth-or-refresh (session)
   "Make new token or read stored token, then refresh.
 
-SESSION is session structure made by `oauth2-ext-session-make'."
+SESSION is session structure made by `oauth2-ext-session-make'.
+Return nil if succeed, otherwise error response."
   (let* ((plist (oauth2-ext-session-plist session))
 	 (refresh-token (plist-get plist :refresh-token)))
-    (if refresh-token
-	(oauth2-ext-refresh session)
+    (when (or (null refresh-token) (oauth2-ext-refresh session))
+      ;; If no refresh-token or refresh was failed, start from auth.
       (oauth2-ext-auth-and-store session))))
 
 ;;;###autoload
@@ -541,9 +544,11 @@ SESSION is session structure made by `oauth2-ext-session-make'."
   "Get access token for OAUTH2.
 
 SESSION is session structure made by `oauth2-ext-session-make'."
-  (oauth2-ext-auth-or-refresh session)
-  (let ((plist (oauth2-ext-session-plist session)))
-    (plist-get plist :access-token)))
+  (let ((response (oauth2-ext-auth-or-refresh session)))
+    (if (assoc 'error response)
+	(error "OAuth2 failed to get access token: %s" response)
+      (let ((plist (oauth2-ext-session-plist session)))
+	(plist-get plist :access-token)))))
 
 (defconst oauth2-ext-gmail-props
   ;; Get from
