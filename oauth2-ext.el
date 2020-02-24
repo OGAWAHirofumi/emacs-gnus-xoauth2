@@ -27,16 +27,18 @@
 ;;; Code:
 
 (eval-when-compile (require 'subr-x))
-(require 'url-parse)
-(require 'url-util)
-(require 'oauth2)
+(require 'url)
 (require 'plstore)
 (require 'auth-source-pass)
 
 (defgroup oauth2-ext nil
   "Extending oauth2.el"
   :version "28.1"
-  :group 'comm)
+  :group 'oauth2-ext)
+
+(defcustom oauth2-ext-token-file (concat user-emacs-directory "oauth2.plstore")
+  "File path where store OAuth tokens."
+  :type 'file)
 
 (defun oauth2-ext-pass-gpg-id ()
   "Get gpg id from password-store's .gpg-id."
@@ -236,6 +238,23 @@ QUERY is passed to `url-build-query-string'."
 	  (if (string-match-p "\\?" prefix) "&" "?")
 	  (url-build-query-string query)))
 
+(defun oauth2-ext-request-access-parse ()
+  "Parse the result of an OAuth request."
+  (goto-char (point-min))
+  (when (search-forward-regexp "^$" nil t)
+    (json-read)))
+
+(defun oauth2-ext-make-access-request (url data)
+  "Make an access request to URL using DATA in POST."
+  (let ((url-request-method "POST")
+        (url-request-data data)
+        (url-request-extra-headers
+	 '(("Content-Type" . "application/x-www-form-urlencoded"))))
+    (with-current-buffer (url-retrieve-synchronously url)
+      (let ((data (oauth2-ext-request-access-parse)))
+        (kill-buffer (current-buffer))
+        data))))
+
 (defconst oauth2-ext-redirect-uri-manual "urn:ietf:wg:oauth:2.0:oob"
   "Redirect URI for Manual copy/paste.")
 
@@ -281,7 +300,7 @@ EXTRA is a list of extra query parameters that is passed to
 				    oauth2-ext-redirect-uri-manual))
 		 (grant_type "authorization_code")
 		 ,@extra)))
-    (oauth2-make-access-request token-url (url-build-query-string query))))
+    (oauth2-ext-make-access-request token-url (url-build-query-string query))))
 
 (defun oauth2-ext-request-refresh (token-url client-id client-secret
 					     refresh-token
@@ -299,7 +318,7 @@ EXTRA is a list of extra query parameters that is passed to
 		 (refresh_token ,refresh-token)
 		 (grant_type "refresh_token")
 		 ,@extra)))
-    (oauth2-make-access-request token-url (url-build-query-string query))))
+    (oauth2-ext-make-access-request token-url (url-build-query-string query))))
 
 (defun oauth2-ext-make-random-state ()
   "Make random state string for authz request."
@@ -368,7 +387,7 @@ store the token in an unique way.
 
 `oauth2-ext-session-redirect-uri' is uri how to get response from
 browser.  If redirect-uri is nil, use localhost with internal
-micro httpd.  
+micro httpd.
 `oauth2-ext-session-login-hint' is to add \"login_hint\"
 parameter to authorization."
 
@@ -387,7 +406,7 @@ parameter to authorization."
   (let ((plstore-encrypt-to oauth2-ext-encrypt-to))
     (or (oauth2-ext-session-plstore session)
 	(setf (oauth2-ext-session-plstore session)
-	      (plstore-open oauth2-token-file)))))
+	      (plstore-open oauth2-ext-token-file)))))
 
 (defun oauth2-ext-session-plist (session)
   "Return plist of plstore for SESSION."
