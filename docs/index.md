@@ -12,7 +12,7 @@ add the following to .gnus.el
 (setq gnus-secondary-select-methods
   (nnimap "foo.gmail.com"
     (nnimap-authenticator xoauth2)
-    (nnimap-user "foo")
+    (nnimap-user "foo@gmail.com")
     (nnimap-address "imap.gmail.com")
     (nnimap-server-port "imaps")
     (nnimap-stream ssl)))

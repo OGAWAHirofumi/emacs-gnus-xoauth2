@@ -188,6 +188,8 @@ which are used to build and return the property list required by
 			     (session (oauth2-ext-session-make
 				       client-id client-secret auth-url
 				       token-url scope key)))
+			(when user
+			  (setf (oauth2-ext-session-login-hint session) user))
 			(message "Getting OAuth2 token for %s..." key)
 			(oauth2-ext-access-token session)))))))
 

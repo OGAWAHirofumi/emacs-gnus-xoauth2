@@ -357,15 +357,21 @@ EXTRA is a list of extra query parameters that is passed to
 				     keys)))))
   "Make session structure for OAuth2.
 
+Parameters for `oauth2-ext-session-make':
 CLIENT-ID is the client id provided by the provider.
 CLIENT-SECRET is the client secret provided by the provider.
 AUTH-URL is URL to request authorization code.
 TOKEN-URL is URL to request access token.
 SCOPE is the list of resource scopes.
-REDIRECT-URI is uri how to get response from browser.  If
-REDIRECT-URI is nil, use localhost with internal micro httpd.
 KEYS are arbitrary string or list of string.  This allows to
-store the token in an unique way."
+store the token in an unique way.
+
+`oauth2-ext-session-redirect-uri' is uri how to get response from
+browser.  If redirect-uri is nil, use localhost with internal
+micro httpd.  
+`oauth2-ext-session-login-hint' is to add \"login_hint\"
+parameter to authorization."
+
   plstore-id
   plstore
   (client-id nil :read-only t)
@@ -373,7 +379,8 @@ store the token in an unique way."
   (auth-url nil :read-only t)
   (token-url nil :read-only t)
   (scope nil :read-only t)
-  redirect-uri)
+  redirect-uri
+  login-hint)
 
 (defun oauth2-ext-session-plstore-open (session)
   "Open plstore for SESSION."
@@ -455,7 +462,11 @@ EXTRA is a list of extra query parameters that is passed to
 SESSION is session structure made by `oauth2-ext-session-make'.
 STATE is an arbitrary string to keep some object for CRLF attack."
   (let* ((pkce-params (and oauth2-ext-use-pkce (oauth2-ext-pkce-params)))
-	 (auth-code (oauth2-ext-auth-code session state (nth 1 pkce-params))))
+	 (login-hint (let ((hint (oauth2-ext-session-login-hint session)))
+		       (and hint `((login_hint ,hint)))))
+	 (extra (append (nth 1 pkce-params)
+			login-hint))
+	 (auth-code (oauth2-ext-auth-code session state extra)))
     (let ((token-url (oauth2-ext-session-token-url session))
 	  (client-id (oauth2-ext-session-client-id session))
 	  (client-secret (oauth2-ext-session-client-secret session))
