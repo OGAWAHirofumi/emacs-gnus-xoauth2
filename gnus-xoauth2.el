@@ -184,11 +184,12 @@ which are used to build and return the property list required by
 	    :secret (lambda ()
 		      (let* ((key (or user host))
 			     (oauth2-httpd-response-title
-			      (format "OAuth2 response for %s" key)))
+			      (format "OAuth2 response for %s" key))
+			     (session (oauth2-ext-session-make
+				       client-id client-secret auth-url
+				       token-url scope key)))
 			(message "Getting OAuth2 token for %s..." key)
-			(oauth2-ext-access-token auth-url token-url scope
-						 client-id client-secret nil
-						 key)))))))
+			(oauth2-ext-access-token session)))))))
 
 (cl-defun auth-source-xoauth2-search (&rest spec
                                             &key backend type host user port

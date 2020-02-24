@@ -220,6 +220,22 @@ symmetric encryption will be used."
     (delete-process serv-proc)
     response))
 
+(defun oauth2-ext-compute-id (client-id auth-url token-url scope &optional keys)
+  "Compute an unique id based on URLs.
+The unique id is made from CLIENT-ID, AUTH-URL, TOKEN-URL,
+SCOPE, and KEYS.  KEYS are arbitrary string or list of
+string.  This allows to store the token in an unique way."
+  (let ((keys (if (listp keys) keys (list keys))))
+    (secure-hash 'md5 (apply #'concat client-id auth-url token-url scope
+			     keys))))
+
+(defun oauth2-ext-build-url (prefix query)
+  "Build URL from PREFIX and QUERY.
+QUERY is passed to `url-build-query-string'."
+  (concat prefix
+	  (if (string-match-p "\\?" prefix) "&" "?")
+	  (url-build-query-string query)))
+
 (defconst oauth2-ext-redirect-uri-manual "urn:ietf:wg:oauth:2.0:oob"
   "Redirect URI for Manual copy/paste.")
 
@@ -228,63 +244,62 @@ symmetric encryption will be used."
 
 (defun oauth2-ext-request-authorization (auth-url client-id
 						  &optional scope state
-						  redirect-uri
-						  challenge challenge-method)
-  "Request OAuth authorization at AUTH-URL by launching `browse-url'.
+						  redirect-uri extra)
+  "Request OAuth authorization code at AUTH-URL by launching `browse-url'.
+
 CLIENT-ID is the client id provided by the provider.
 SCOPE is the list of resource scopes.
-STATE is to keep some object for CRLF attack.
+STATE is an arbitrary string to keep some object for CRLF attack.
 REDIRECT-URI is uri how to get response from browser.  If
 REDIRECT-URI is nil, `oauth2-ext-redirect-uri-manual' is used.
-If CHALLENGE and CHALLENGE-METHOD is non-nil, set PKCE protocol parameters."
-  (browse-url (concat auth-url
-		      (if (string-match-p "\\?" auth-url) "&" "?")
-		      "client_id=" (url-hexify-string client-id)
-		      "&response_type=code"
-		      "&redirect_uri=" (url-hexify-string redirect-uri)
-		      (and challenge challenge-method
-			   (concat "&code_challenge=" challenge
-				   "&code_challenge_method=" challenge-method))
-		      (and scope
-			   (concat "&scope=" (url-hexify-string scope)))
-		      (and state
-			   (concat "&state=" (url-hexify-string state))))))
-
-(defun oauth2-ext-compute-id (client-id auth-url token-url resource-url
-					&optional keys)
-  "Compute an unique id based on URLs.
-The unique id is made from CLIENT-ID, AUTH-URL, TOKEN-URL,
-RESOURCE-URL, and KEYS.  KEYS are arbitrary string or list of
-string.  This allows to store the token in an unique way."
-  (let ((keys (if (listp keys) keys (list keys))))
-    (secure-hash 'md5 (apply #'concat client-id auth-url token-url resource-url
-			     keys))))
-
-(defvar oauth2-ext-auth-prompt "Enter the code your browser displayed: ")
+EXTRA is a list of extra query parameters that is passed to
+`url-build-query-string'."
+  (let ((query `((client_id ,client-id)
+		 (response_type "code")
+		 (redirect_uri ,(or redirect-uri
+				    oauth2-ext-redirect-uri-manual))
+		 ,@(and scope `((scope ,scope)))
+		 ,@(and state `((state ,state)))
+		 ,@extra)))
+    (browse-url (oauth2-ext-build-url auth-url query))))
 
 (defun oauth2-ext-request-access (token-url client-id client-secret code
-					    &optional redirect-uri code-verifier)
-  "Request OAuth2 access at TOKEN-URL.
-The CODE should be obtained with `oauth2-request-authorization'.
-Return an `oauth2-token' structure."
-  (when code
-    (let ((result
-           (oauth2-make-access-request
-            token-url
-            (concat
-             "client_id=" client-id
-             "&client_secret=" client-secret
-             "&code=" code
-             "&redirect_uri=" (url-hexify-string (or redirect-uri
-						     oauth2-ext-redirect-uri-manual))
-	     (and code-verifier (concat "&code_verifier=" code-verifier))
-             "&grant_type=authorization_code"))))
-      (make-oauth2-token :client-id client-id
-                         :client-secret client-secret
-                         :access-token (cdr (assoc 'access_token result))
-                         :refresh-token (cdr (assoc 'refresh_token result))
-                         :token-url token-url
-                         :access-response result))))
+					    &optional redirect-uri extra)
+  "Request OAuth2 access token at TOKEN-URL.
+
+CLIENT-ID is the client id provided by the provider.
+CLIENT-SECRET is the client secret provided by the provider.
+CODE should be obtained with `oauth2-request-authorization'.
+REDIRECT-URI is uri how to get response from browser.  If
+REDIRECT-URI is nil, `oauth2-ext-redirect-uri-manual' is used.
+EXTRA is a list of extra query parameters that is passed to
+`url-build-query-string'."
+  (let ((query `((client_id ,client-id)
+		 (client_secret ,client-secret)
+		 (code ,code)
+		 (redirect_uri ,(or redirect-uri
+				    oauth2-ext-redirect-uri-manual))
+		 (grant_type "authorization_code")
+		 ,@extra)))
+    (oauth2-make-access-request token-url (url-build-query-string query))))
+
+(defun oauth2-ext-request-refresh (token-url client-id client-secret
+					     refresh-token
+					     &optional extra)
+  "Request OAuth2 refreshed access token at TOKEN-URL.
+
+CLIENT-ID is the client id provided by the provider.
+CLIENT-SECRET is the client secret provided by the provider.
+REFRESH-TOKEN should be obtained with `oauth2-ext-request-access'
+or previous `oauth2-ext-request-refresh'.
+EXTRA is a list of extra query parameters that is passed to
+`url-build-query-string'."
+  (let ((query `((client_id ,client-id)
+		 (client_secret ,client-secret)
+		 (refresh_token ,refresh-token)
+		 (grant_type "refresh_token")
+		 ,@extra)))
+    (oauth2-make-access-request token-url (url-build-query-string query))))
 
 (defun oauth2-ext-make-random-state ()
   "Make random state string for authz request."
@@ -308,6 +323,7 @@ Return an `oauth2-token' structure."
 	  (push c vec))))
     (concat vec)))
 
+;; FIXME: support plain
 (defvar oauth2-ext-pkce-challenge-method "S256")
 
 (defun oauth2-ext-pkce-make-challenge (verifier)
@@ -315,157 +331,188 @@ Return an `oauth2-token' structure."
   (base64url-encode-string
    (secure-hash 'sha256 verifier nil nil t) t))
 
-;;;###autoload
-(defun oauth2-ext-auth (auth-url token-url client-id client-secret
-				 &optional scope state redirect-uri)
-  "Authenticate application via OAuth2."
-  (let* ((serv-proc (or redirect-uri (oauth2-httpd-start)))
-	 (verifier (and oauth2-ext-use-pkce
-			(oauth2-ext-pkce-make-verifier
-			 oauth2-ext-pkce-verifier-length)))
-	 (state (or state (and oauth2-ext-use-random-state
-			       (oauth2-ext-make-random-state))))
-	 (challenge (and verifier
-			 (oauth2-ext-pkce-make-challenge verifier)))
-	 (challenge-method (and challenge oauth2-ext-pkce-challenge-method))
-	 (redirect-uri (or redirect-uri
-			   (format "http://localhost:%d%s"
-				   (process-contact serv-proc :service)
-				   oauth2-httpd-callback-path)))
-	 (auth-code (progn
-		      (oauth2-ext-request-authorization
-		       auth-url client-id scope state redirect-uri
-		       challenge challenge-method)
-		      (cond
-		       (serv-proc
-			(let* ((response (oauth2-httpd-wait-response serv-proc))
-			       (res-state (nth 1 (assoc "state" response))))
-			  (when (and state (or (null res-state)
-					       (not (string= state res-state))))
-			    (user-error "Failed verify of OAuth2 authz response state"))
-			  (nth 1 (assoc "code" response))))
-		       (t
-			(read-string oauth2-ext-auth-prompt))))))
-    (oauth2-ext-request-access
-     token-url
-     client-id
-     client-secret
-     auth-code
-     redirect-uri
-     verifier)))
+(defun oauth2-ext-pkce-params ()
+  "Make PKCE query parameters."
+  (let* ((verifier (oauth2-ext-pkce-make-verifier
+		    oauth2-ext-pkce-verifier-length))
+	 (challenge (oauth2-ext-pkce-make-challenge verifier)))
+    `(((code_verifier ,verifier))
+      ((code_challenge ,challenge)
+       (code_challenge_method ,oauth2-ext-pkce-challenge-method)))))
 
-(defun oauth2-ext-auth-and-store (auth-url token-url resource-url
-					   client-id client-secret
-					   &optional redirect-uri keys)
-  "Request access to a resource and store it using `plstore'.
+(cl-defstruct (oauth2-ext-session
+	       (:constructor nil)	; no default
+	       (:copier nil)
+	       (:predicate nil)
+	       (:constructor oauth2-ext-session-make
+			     (client-id
+			      client-secret
+			      auth-url
+			      token-url
+			      scope
+			      &optional keys
+			      &aux (plstore-id
+				    (oauth2-ext-compute-id
+				     client-id auth-url token-url scope
+				     keys)))))
+  "Make session structure for OAuth2.
 
-AUTH-URL, TOKEN-URL, RESOURCE-URL, CLIENT-ID, CLIENT-SECRET,
-REDIRECT-URI are used for OAUTH2 protocol.  Stored token are
-identified by AUTH-URL, TOKEN-URL, RESOURCE-URL, and KEYS."
-  ;; We store a MD5 sum of all URL and keys
+CLIENT-ID is the client id provided by the provider.
+CLIENT-SECRET is the client secret provided by the provider.
+AUTH-URL is URL to request authorization code.
+TOKEN-URL is URL to request access token.
+SCOPE is the list of resource scopes.
+REDIRECT-URI is uri how to get response from browser.  If
+REDIRECT-URI is nil, use localhost with internal micro httpd.
+KEYS are arbitrary string or list of string.  This allows to
+store the token in an unique way."
+  plstore-id
+  plstore
+  (client-id :read-only t)
+  (client-secret :read-only t)
+  (auth-url :read-only t)
+  (token-url :read-only t)
+  (scope :read-only t)
+  redirect-uri)
+
+(defun oauth2-ext-session-plstore-open (session)
+  "Open plstore for SESSION."
+  (let ((plstore-encrypt-to oauth2-ext-encrypt-to))
+    (or (oauth2-ext-session-plstore session)
+	(setf (oauth2-ext-session-plstore session)
+	      (plstore-open oauth2-token-file)))))
+
+(defun oauth2-ext-session-plist (session)
+  "Return plist of plstore for SESSION."
+  (let* ((plstore (oauth2-ext-session-plstore-open session))
+         (id (oauth2-ext-session-plstore-id session)))
+    (cdr (plstore-get plstore id))))
+
+(defun oauth2-ext-session-update-plstore (session access-token refresh-token
+						  access-response)
+  "Update and plstore data for SESSION.
+Updating entries are specified by ACCESS-TOKEN, REFRESH-TOKEN,
+ACCESS-RESPONSE."
   (let* ((make-backup-files nil)
 	 (plstore-encrypt-to oauth2-ext-encrypt-to)
-	 (plstore (plstore-open oauth2-token-file))
-         (id (oauth2-ext-compute-id client-id auth-url token-url resource-url
-				    keys))
-         (plist (cdr (plstore-get plstore id))))
-    ;; Check if we found something matching this access
-    (if plist
-        ;; We did, return the token object
-        (make-oauth2-token :plstore plstore
-                           :plstore-id id
-                           :client-id client-id
-                           :client-secret client-secret
-                           :access-token (plist-get plist :access-token)
-                           :refresh-token (plist-get plist :refresh-token)
-                           :token-url token-url
-                           :access-response (plist-get plist :access-response))
-      (let ((token (oauth2-ext-auth auth-url token-url
-                                    client-id client-secret resource-url
-				    nil redirect-uri)))
-        ;; Set the plstore
-        (setf (oauth2-token-plstore token) plstore)
-        (setf (oauth2-token-plstore-id token) id)
-        (plstore-put plstore id nil `(:access-token
-                                      ,(oauth2-token-access-token token)
-                                      :refresh-token
-                                      ,(oauth2-token-refresh-token token)
-                                      :access-response
-                                      ,(oauth2-token-access-response token)))
-        (plstore-save plstore)
-        token))))
+	 (plstore (oauth2-ext-session-plstore-open session))
+	 (plist (oauth2-ext-session-plist session))
+         (id (oauth2-ext-session-plstore-id session))
+	 (access-token (or access-token (plist-get plist :access-token)))
+	 (refresh-token (or refresh-token (plist-get plist :refresh-token)))
+	 (access-response (or access-response
+			      (plist-get plist :access-response))))
+    (plstore-put plstore id nil `(:access-token ,access-token
+				  :refresh-token ,refresh-token
+				  :access-response ,access-response))
+    (plstore-save plstore)))
 
-(defun oauth2-ext-refresh-access (token auth-url resource-url redirect-uri)
-  "Refresh OAUTH2 access TOKEN.
-If refresh returned error, restart from `oauth2-ext-auth' with
-AUTH-URL, RESOURCE-URL, and REDIRECT-URI parameters.  TOKEN
-should be obtained with `oauth2-request-access'."
-  (let* ((make-backup-files nil)
-	 (plstore-encrypt-to oauth2-ext-encrypt-to)
-	 (token-url (oauth2-token-token-url token))
-	 (client-id (oauth2-token-client-id token))
-	 (client-secret (oauth2-token-client-secret token))
-	 (response (oauth2-make-access-request
-                    token-url
-                    (concat "client_id=" client-id
-                            "&client_secret=" client-secret
-                            "&refresh_token=" (oauth2-token-refresh-token token)
-                            "&grant_type=refresh_token"))))
+(defvar oauth2-ext-auth-prompt "Enter the code your browser displayed: ")
+
+(defun oauth2-ext-auth-code (session &optional state extra)
+  "Authenticate application via OAuth2.
+
+SESSION is session structure made by `oauth2-ext-session-make'.
+STATE is an arbitrary string to keep some object for CRLF
+attack.  If STATE is nil and `oauth2-ext-use-random-state' is
+non-nil, use random state value.
+EXTRA is a list of extra query parameters that is passed to
+`url-build-query-string'."
+  (let ((auth-url (oauth2-ext-session-auth-url session))
+	(client-id (oauth2-ext-session-client-id session))
+	(scope (oauth2-ext-session-scope session))
+	(state (or state (and oauth2-ext-use-random-state
+			      (oauth2-ext-make-random-state))))
+	(redirect-uri (oauth2-ext-session-redirect-uri session))
+	serv-proc)
+
+    (when (null redirect-uri)
+      ;; start micro httpd
+      (setq serv-proc (oauth2-httpd-start))
+      (setq redirect-uri (format "http://localhost:%d%s"
+				 (process-contact serv-proc :service)
+				 oauth2-httpd-callback-path))
+      (setf (oauth2-ext-session-redirect-uri session) redirect-uri))
+
+    (oauth2-ext-request-authorization auth-url client-id scope state
+				      redirect-uri extra)
+
+    (cond
+     (serv-proc
+      ;; get response from micro httpd
+      (let* ((response (oauth2-httpd-wait-response serv-proc))
+	     (res-state (nth 1 (assoc "state" response))))
+	(when (and state (or (null res-state)
+			     (not (string= state res-state))))
+	  (user-error "Failed verify of OAuth2 authz response state"))
+	(nth 1 (assoc "code" response))))
+     (t
+      (read-string oauth2-ext-auth-prompt)))))
+
+(defun oauth2-ext-auth (session &optional state)
+  "Authenticate application, then request access token via OAuth2.
+
+SESSION is session structure made by `oauth2-ext-session-make'.
+STATE is an arbitrary string to keep some object for CRLF attack."
+  (let* ((pkce-params (and oauth2-ext-use-pkce (oauth2-ext-pkce-params)))
+	 (auth-code (oauth2-ext-auth-code session state (nth 1 pkce-params))))
+    (let ((token-url (oauth2-ext-session-token-url session))
+	  (client-id (oauth2-ext-session-client-id session))
+	  (client-secret (oauth2-ext-session-client-secret session))
+	  (redirect-uri (oauth2-ext-session-redirect-uri session)))
+      (oauth2-ext-request-access token-url client-id client-secret auth-code
+				 redirect-uri (nth 0 pkce-params)))))
+
+(defun oauth2-ext-auth-and-store (session)
+  "Request access/refresh token and store it by using `plstore'.
+If there is stored token, read it instead of requesting.
+
+SESSION is session structure made by `oauth2-ext-session-make'."
+  (let ((response (oauth2-ext-auth session)))
+    ;; FIXME: error handling
+    (oauth2-ext-session-update-plstore session
+				       (cdr (assoc 'access_token response))
+				       (cdr (assoc 'refresh_token response))
+				       response)))
+
+(defun oauth2-ext-refresh (session)
+  "Refresh OAUTH2 access token.
+
+SESSION is session structure made by `oauth2-ext-session-make'."
+  (let* ((token-url (oauth2-ext-session-token-url session))
+	 (client-id (oauth2-ext-session-client-id session))
+	 (client-secret (oauth2-ext-session-client-secret session))
+	 (plist (oauth2-ext-session-plist session))
+	 (refresh-token (plist-get plist :refresh-token))
+	 (response (oauth2-ext-request-refresh token-url client-id client-secret
+					       refresh-token)))
     (if (not (assoc 'error response))
-	(setf (oauth2-token-access-token token)
-	      (cdr (assoc 'access_token response)))
-      ;; if refresh was error, restart from `oauth2-ext-auth'
+	;; Success
+	(oauth2-ext-session-update-plstore session
+					   (cdr (assoc 'access_token response))
+					   nil nil)
+      ;; If refresh was error, restart from `oauth2-ext-auth'
       ;; FIXME: should check detail of error
-      (let ((auth-token (oauth2-ext-auth auth-url token-url
-					 client-id client-secret resource-url
-					 nil redirect-uri)))
-	(setf (oauth2-token-access-token token)
-	      (oauth2-token-access-token auth-token))
-	(setf (oauth2-token-refresh-token token)
-	      (oauth2-token-refresh-token auth-token))
-	(setf (oauth2-token-access-response token)
-	      (oauth2-token-access-response auth-token))))
-    ;; If the token has a plstore, update it
-    (let ((plstore (oauth2-token-plstore token)))
-      (when plstore
-	(plstore-put plstore (oauth2-token-plstore-id token)
-                     nil `(:access-token
-                           ,(oauth2-token-access-token token)
-                           :refresh-token
-                           ,(oauth2-token-refresh-token token)
-                           :access-response
-                           ,(oauth2-token-access-response token)
-                           ))
-	(plstore-save plstore)))
-    token))
+      (oauth2-ext-auth-and-store session))))
 
-(defun oauth2-ext-auth-or-refresh (auth-url token-url resource-url client-id
-					    client-secret
-					    &optional redirect-uri keys)
+(defun oauth2-ext-auth-or-refresh (session)
   "Make new token or read stored token, then refresh.
 
-AUTH-URL, TOKEN-URL, RESOURCE-URL, CLIENT-ID, CLIENT-SECRET,
-REDIRECT-URI are used for OAUTH2 protocol.  Stored token are
-identified by AUTH-URL, TOKEN-URL, RESOURCE-URL, and KEYS."
-  (let ((token (oauth2-ext-auth-and-store auth-url token-url resource-url
-					  client-id client-secret
-					  redirect-uri keys)))
-    (oauth2-ext-refresh-access token auth-url resource-url redirect-uri)
-    token))
+SESSION is session structure made by `oauth2-ext-session-make'."
+  (let* ((plist (oauth2-ext-session-plist session))
+	 (refresh-token (plist-get plist :refresh-token)))
+    (if refresh-token
+	(oauth2-ext-refresh session)
+      (oauth2-ext-auth-and-store session))))
 
 ;;;###autoload
-(defun oauth2-ext-access-token (auth-url token-url resource-url
-					 client-id client-secret
-					 &optional redirect-uri keys)
+(defun oauth2-ext-access-token (session)
   "Get access token for OAUTH2.
 
-AUTH-URL, TOKEN-URL, RESOURCE-URL, CLIENT-ID, CLIENT-SECRET,
-REDIRECT-URI are used for OAUTH2 protocol.  Stored token are
-identified by AUTH-URL, TOKEN-URL, RESOURCE-URL, and KEYS."
-  (let ((token (oauth2-ext-auth-or-refresh auth-url token-url resource-url
-					   client-id client-secret
-					   redirect-uri keys)))
-    (oauth2-token-access-token token)))
+SESSION is session structure made by `oauth2-ext-session-make'."
+  (oauth2-ext-auth-or-refresh session)
+  (let ((plist (oauth2-ext-session-plist session)))
+    (plist-get plist :access-token)))
 
 (defconst oauth2-ext-gmail-props
   ;; Get from
