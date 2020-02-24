@@ -275,7 +275,8 @@ Return an `oauth2-token' structure."
              "client_id=" client-id
              "&client_secret=" client-secret
              "&code=" code
-             "&redirect_uri=" (url-hexify-string (or redirect-uri "urn:ietf:wg:oauth:2.0:oob"))
+             "&redirect_uri=" (url-hexify-string (or redirect-uri
+						     oauth2-ext-redirect-uri-manual))
 	     (and code-verifier (concat "&code_verifier=" code-verifier))
              "&grant_type=authorization_code"))))
       (make-oauth2-token :client-id client-id
