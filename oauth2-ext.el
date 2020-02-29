@@ -214,11 +214,9 @@ symmetric encryption will be used."
 
 (defun oauth2-httpd-wait-response (serv-proc)
   "Wait mini-httpd response from SERV-PROC."
-  (catch 'got
-    (dotimes (_i (* 60 30))
-      (accept-process-output nil 1)
-      (when (process-get serv-proc :response)
-	(throw 'got nil))))
+  (with-timeout ((* 10 60))
+    (while (null (process-get serv-proc :response))
+      (accept-process-output nil 1)))
   (let ((response (process-get serv-proc :response)))
     (delete-process serv-proc)
     response))
