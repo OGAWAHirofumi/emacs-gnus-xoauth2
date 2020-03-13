@@ -49,7 +49,7 @@
 ;;
 ;;     client-id, client-secret, auth-url, token-url, and scope
 ;;
-;; from password-store. Then by using `oauth2', this fetches access
+;; from password-store.  Then by using `oauth2', this fetches access
 ;; token with above parameters.
 ;; 
 ;; If you are using this to authenticate to Google, the values can be
@@ -92,8 +92,8 @@
 If this is set to a string, it is considered the name of a file
 containing one sexp that evaluates to either the property list above,
 or to a hash table containing (HOST USER PORT) keys mapping to
-property lists as above. Note that the hash table /must/ have its
-`:test' property set to `equal'. Example:
+property lists as above.  Note that the hash table /must/ have its
+`:test' property set to `equal'.  Example:
 
     #s(hash-table size 2 test equal
        data ((\"host1.com\" \"user1\" \"port1\")
@@ -119,8 +119,9 @@ password-store.  See `auth-source-xoauth2-pass-creds' for details."
 
 (defun auth-source-xoauth2-pass-creds (host user port)
   "Retrieve a XOAUTH2 access token using `auth-source-pass'.
-This function retrieve a password-store entry matching HOST, USER, and
-PORT. This entry should contain the following key-value pairs:
+This function retrieve a password-store entry matching HOST,
+USER, and PORT.  This entry should contain the following
+key-value pairs:
 
 <client-secret>
 username: <client-id>
@@ -196,8 +197,9 @@ which are used to build and return the property list required by
 (cl-defun auth-source-xoauth2-search (&rest spec
                                             &key backend type host user port
                                             &allow-other-keys)
-  "Given a property list SPEC, return search matches from the :backend.
-See `auth-source-search' for details on SPEC."
+  "Search OAuth2 client-id and client-secret from password-store.
+See `auth-source-search' for details on SPEC, BACKEND, TYPE,
+HOST, USER, and PORT."
   ;; just in case, check that the type is correct (null or same as the backend)
   (cl-assert (or (null type) (eq type (oref backend type)))
              t "Invalid xoauth2 search: %s %s")
@@ -266,6 +268,9 @@ See `auth-source-search' for details on SPEC."
 (defvar nnimap-authenticator)
 (declare-function nnimap-capability "nnimap" (capability))
 (defun gnus-xoauth2-nnimap-login (fn user password)
+  "The function to hook `nnimap-login'.
+FN is original function (i.e. `nnimap-login').  USER is the user
+name for IMAP, PASSWORD is the OAuth2 access-token."
   (if (and (eq nnimap-authenticator 'xoauth2)
 	   (nnimap-capability "AUTH=XOAUTH2")
 	   (nnimap-capability "SASL-IR"))
@@ -277,6 +282,9 @@ See `auth-source-search' for details on SPEC."
 		  (process string &optional code))
 (cl-defmethod smtpmail-try-auth-method
   (process (_mech (eql xoauth2)) user password)
+  "The method for `xoauth2'.
+PROCESS is the connection to SMTP server.  USER is the user name
+for SMTP, PASSWORD is the OAuth2 access-token."
   (smtpmail-command-or-throw
    process
    (concat "AUTH XOAUTH2 " (gnus-xoauth2-token user password))
