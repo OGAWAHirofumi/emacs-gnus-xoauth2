@@ -483,6 +483,8 @@ EXTRA is a list of extra query parameters that is passed to
       ;; get response from micro httpd
       (let* ((response (oauth2-httpd-wait-response serv-proc))
 	     (res-state (nth 1 (assoc "state" response))))
+	(when (null response)
+	  (error "OAuth2 failed to get authz response"))
 	(when (and state (or (null res-state)
 			     (not (string= state res-state))))
 	  (error "OAuth2 failed verify of authz response state"))
