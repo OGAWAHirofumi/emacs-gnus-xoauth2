@@ -68,6 +68,10 @@ symmetric encryption will be used."
   "Length of PKCE code verifier (must be >= 43)."
   :type 'boolean)
 
+(defcustom oauth2-httpd-response-timeout 60
+  "Seconds until timeout of authorization response."
+  :type 'string)
+
 (defcustom oauth2-httpd-response-title "OAuth2 response"
   "Title of authorization response used by `oauth2-httpd-auth-response-default'."
   :type 'string)
@@ -214,7 +218,7 @@ symmetric encryption will be used."
 
 (defun oauth2-httpd-wait-response (serv-proc)
   "Wait mini-httpd response from SERV-PROC."
-  (with-timeout ((* 10 60))
+  (with-timeout (oauth2-httpd-response-timeout)
     (while (null (process-get serv-proc :response))
       (accept-process-output nil 1)))
   (let ((response (process-get serv-proc :response)))
