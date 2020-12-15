@@ -296,10 +296,10 @@ for SMTP, PASSWORD is the OAuth2 access-token."
   (interactive)
 
   ;; Add functionality to nnimap-login
-  (with-eval-after-load "nnimap"
+  (with-eval-after-load 'nnimap
     (advice-add 'nnimap-login :around #'gnus-xoauth2-nnimap-login))
   ;; Add the functionality to smtpmail-try-auth-method
-  (with-eval-after-load "smtpmail"
+  (with-eval-after-load 'smtpmail
     (add-to-list 'smtpmail-auth-supported 'xoauth2))
 
   ;; To add password-store to the list of sources, evaluate the following:
