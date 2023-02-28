@@ -241,13 +241,19 @@ QUERY is passed to `url-build-query-string'."
 	  (if (string-match-p "\\?" prefix) "&" "?")
 	  (url-build-query-string query)))
 
-(defsubst oauth2-json-read ()
+(defalias 'oauth2-json-read
   (if (fboundp 'json-parse-buffer)
-      (json-parse-buffer :object-type 'alist
-                         :null-object nil
-                         :false-object :json-false)
+      (lambda ()
+	(json-parse-buffer :object-type 'alist
+                           :null-object nil
+                           :false-object :json-false))
     (require 'json)
-    (json-read)))
+    (defvar json-object-type)
+    (declare-function json-read "json" ())
+    (lambda ()
+      (let ((json-object-type 'alist))
+        (json-read))))
+  "Read JSON object in buffer, move point to end of buffer.")
 
 (defun oauth2-ext-request-access-parse ()
   "Parse the result of an OAuth request."
