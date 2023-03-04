@@ -51,12 +51,12 @@
 ;;
 ;; from password-store.  Then by using `oauth2', this fetches access
 ;; token with above parameters.
-;; 
+;;
 ;; If you are using this to authenticate to Google, the values can be
 ;; obtained through the following procedure (note that Google changes
 ;; this procedure somewhat frequently, so the steps may be slightly
 ;; different):
-;; 
+;;
 ;; 1. Go to the developer console, https://console.developers.google.com/project
 ;; 2. Create a new project (if necessary), and select it once created.
 ;; 3. Select "APIs & Services" from the navigation menu.
@@ -64,7 +64,7 @@
 ;; 5. Create new credentials of type "OAuth Client ID".
 ;; 6. Choose application type "Other".
 ;; 7. Choose a name for the client.
-;; 
+;;
 ;; This should get you all the values.
 
 ;;; Code:
@@ -133,12 +133,12 @@ which are used to build and return the property list required by
 `auth-source-xoauth2-creds'."
   (when-let ((entry-data (auth-source-pass--find-match host user port)))
     (when-let ((auth-url (auth-source-pass--get-attr "auth-url" entry-data))
-	       (token-url (auth-source-pass--get-attr "token-url" entry-data))
-	       (scope (auth-source-pass--get-attr "scope" entry-data))
+               (token-url (auth-source-pass--get-attr "token-url" entry-data))
+               (scope (auth-source-pass--get-attr "scope" entry-data))
                (client-id (auth-source-pass--get-attr "user" entry-data))
                (client-secret (auth-source-pass--get-attr 'secret entry-data)))
       (list :auth-url auth-url :token-url token-url :scope scope
-	    :client-id client-id :client-secret client-secret))))
+            :client-id client-id :client-secret client-secret))))
 
 (defun auth-source-xoauth2--file-creds (file host user port)
   "Load FILE and evaluate it, matching entries to HOST, USER, and PORT."
@@ -175,24 +175,24 @@ which are used to build and return the property list required by
                 (auth-source-xoauth2--file-creds
                  auth-source-xoauth2-creds host user port))
                (t
-		(auth-source-xoauth2--alist-creds host)))))
+                (auth-source-xoauth2--alist-creds host)))))
     (when-let ((auth-url (plist-get token :auth-url))
-	       (token-url (plist-get token :token-url))
-	       (scope (plist-get token :scope))
+               (token-url (plist-get token :token-url))
+               (scope (plist-get token :scope))
                (client-id (plist-get token :client-id))
                (client-secret (plist-get token :client-secret)))
       (list :host host :port port :user user
-	    :secret (lambda ()
-		      (let* ((key (or user host))
-			     (oauth2-httpd-response-title
-			      (format "OAuth2 response for %s" key))
-			     (session (oauth2-ext-session-make
-				       client-id client-secret auth-url
-				       token-url scope key)))
-			(when user
-			  (setf (oauth2-ext-session-login-hint session) user))
-			(message "Getting OAuth2 token for %s..." key)
-			(oauth2-ext-access-token session)))))))
+            :secret (lambda ()
+                      (let* ((key (or user host))
+                             (oauth2-httpd-response-title
+                              (format "OAuth2 response for %s" key))
+                             (session (oauth2-ext-session-make
+                                       client-id client-secret auth-url
+                                       token-url scope key)))
+                        (when user
+                          (setf (oauth2-ext-session-login-hint session) user))
+                        (message "Getting OAuth2 token for %s..." key)
+                        (oauth2-ext-access-token session)))))))
 
 (cl-defun auth-source-xoauth2-search (&rest spec
                                             &key backend type host user port
@@ -209,8 +209,8 @@ HOST, USER, and PORT."
       (dolist (host hosts)
         (dolist (port ports)
           (let ((match (auth-source-xoauth2--search host user port)))
-	    (when match
-	      (throw 'match `(,match)))))))))
+            (when match
+              (throw 'match `(,match)))))))))
 
 (defvar auth-source-xoauth2-backend
   (auth-source-backend
@@ -226,18 +226,18 @@ HOST, USER, and PORT."
     (auth-source-backend-parse-parameters entry auth-source-xoauth2-backend)))
 
 (add-hook 'auth-source-backend-parser-functions
-	  #'auth-source-xoauth2-backend-parse)
+          #'auth-source-xoauth2-backend-parse)
 
 ;; nnimap and smtp hook for xoauth2
 (defun gnus-xoauth2-token (user access-token)
   "Make base64 string for XOAUTH2 authentication from USER and ACCESS-TOKEN."
   (base64-encode-string (format "user=%s\001auth=Bearer %s\001\001"
-				user access-token)
-			t))
+                                user access-token)
+                        t))
 
 (defvar nnimap-object)
 (declare-function nnimap-wait-for-line "nnimap"
-		  (regexp &optional response-regexp))
+                  (regexp &optional response-regexp))
 (declare-function nnimap-send-command "nnimap" (&rest args))
 (declare-function nnimap-get-response "nnimap" (sequence))
 (declare-function nnimap-newlinep "nnimap" (object) t)
@@ -246,24 +246,24 @@ HOST, USER, and PORT."
   "Send XOAUTH2 command with USER and ACCESS-TOKEN."
   (erase-buffer)
   (let ((sequence (nnimap-send-command "AUTHENTICATE XOAUTH2 %s"
-				       (gnus-xoauth2-token user access-token)))
-	(challenge (nnimap-wait-for-line "^\\(.*\\)\n")))
+                                       (gnus-xoauth2-token user access-token)))
+        (challenge (nnimap-wait-for-line "^\\(.*\\)\n")))
     ;; on error response, "+ <base64 string>".
     (if (not (string-match "^\\+ [a-zA-Z0-9+/=]+" challenge))
-	(cons t (nnimap-get-response sequence))
+        (cons t (nnimap-get-response sequence))
       ;; send empty response on error
       (let (response)
-	(erase-buffer)
-	(process-send-string (get-buffer-process (current-buffer))
-			     (if (nnimap-newlinep nnimap-object)
-				 "\n"
-			       "\r\n"))
-	(setq response (nnimap-get-response sequence))
-	(nnheader-report 'nnimap "%s"
-			 (mapconcat (lambda (a)
-				      (format "%s" a))
-				    (car response) " "))
-	nil))))
+        (erase-buffer)
+        (process-send-string (get-buffer-process (current-buffer))
+                             (if (nnimap-newlinep nnimap-object)
+                                 "\n"
+                               "\r\n"))
+        (setq response (nnimap-get-response sequence))
+        (nnheader-report 'nnimap "%s"
+                         (mapconcat (lambda (a)
+                                      (format "%s" a))
+                                    (car response) " "))
+        nil))))
 
 (defvar nnimap-authenticator)
 (declare-function nnimap-capability "nnimap" (capability))
@@ -272,14 +272,14 @@ HOST, USER, and PORT."
 FN is original function (i.e. `nnimap-login').  USER is the user
 name for IMAP, PASSWORD is the OAuth2 access-token."
   (if (and (eq nnimap-authenticator 'xoauth2)
-	   (nnimap-capability "AUTH=XOAUTH2")
-	   (nnimap-capability "SASL-IR"))
+           (nnimap-capability "AUTH=XOAUTH2")
+           (nnimap-capability "SASL-IR"))
       (gnus-xoauth2-nnimap-xoauth-command user password)
     (funcall fn user password)))
 
 (defvar smtpmail-auth-supported)
 (declare-function smtpmail-command-or-throw "smtpmail"
-		  (process string &optional code))
+                  (process string &optional code))
 (cl-defmethod smtpmail-try-auth-method
   (process (_mech (eql xoauth2)) user password)
   "The method for `xoauth2'.
