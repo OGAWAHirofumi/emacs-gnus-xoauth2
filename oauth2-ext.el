@@ -33,7 +33,7 @@
 (require 'auth-source-pass)
 
 (defgroup oauth2-ext nil
-  "Extending oauth2.el"
+  "Extending oauth2.el."
   :version "28.1"
   :group 'oauth2-ext)
 
