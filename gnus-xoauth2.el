@@ -115,7 +115,7 @@ PORT values, and should return the respective property list.
 
 This package provides a function that retrieves the values from a
 password-store.  See `auth-source-xoauth2-pass-creds' for details."
-  :type '(choice string function list))
+  :type '(choice file function sexp))
 
 (defun auth-source-xoauth2-pass-creds (host user port)
   "Retrieve a XOAUTH2 access token using `auth-source-pass'.

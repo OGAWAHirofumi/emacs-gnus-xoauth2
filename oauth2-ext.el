@@ -628,7 +628,8 @@ SESSION is session structure made by `oauth2-ext-session-make'."
     ("imap.aol.com" . ,oauth2-ext-aol-props)
     ("smtp.aol.com" . ,oauth2-ext-aol-props))
   "The alist of endpoint URLs for OAUTH2."
-  :type '(alist :key-type string :value-type list))
+  :type '(alist :key-type string
+                :value-type (plist :key-type symbol :value-type string)))
 
 (provide 'oauth2-ext)
 ;;; oauth2-ext.el ends here
