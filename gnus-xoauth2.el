@@ -131,12 +131,12 @@ scope: <value>
 
 which are used to build and return the property list required by
 `auth-source-xoauth2-creds'."
-  (when-let ((entry-data (auth-source-pass--find-match host user port)))
-    (when-let ((auth-url (auth-source-pass--get-attr "auth-url" entry-data))
-               (token-url (auth-source-pass--get-attr "token-url" entry-data))
-               (scope (auth-source-pass--get-attr "scope" entry-data))
-               (client-id (auth-source-pass--get-attr "user" entry-data))
-               (client-secret (auth-source-pass--get-attr 'secret entry-data)))
+  (when-let* ((entry-data (auth-source-pass--find-match host user port)))
+    (when-let* ((auth-url (auth-source-pass--get-attr "auth-url" entry-data))
+                (token-url (auth-source-pass--get-attr "token-url" entry-data))
+                (scope (auth-source-pass--get-attr "scope" entry-data))
+                (client-id (auth-source-pass--get-attr "user" entry-data))
+                (client-secret (auth-source-pass--get-attr 'secret entry-data)))
       (list :auth-url auth-url :token-url token-url :scope scope
             :client-id client-id :client-secret client-secret))))
 
@@ -144,7 +144,7 @@ which are used to build and return the property list required by
   "Load FILE and evaluate it, matching entries to HOST, USER, and PORT."
   (when (not (string= "gpg" (file-name-extension file)))
     (error "The auth-source-xoauth2-creds file must be GPG encrypted"))
-  (when-let
+  (when-let*
       ((creds (condition-case err
                   (eval (with-temp-buffer
                           (insert-file-contents file)
@@ -162,25 +162,25 @@ which are used to build and return the property list required by
 
 (defun auth-source-xoauth2--alist-creds (host)
   "Matching entries to HOST from alist."
-  (when-let ((entry (assoc host auth-source-xoauth2-creds)))
+  (when-let* ((entry (assoc host auth-source-xoauth2-creds)))
     (cadr entry)))
 
 (cl-defun auth-source-xoauth2--search (host user port)
   "Get the XOAUTH2 authentication data for the given HOST, USER, and PORT."
-  (when-let ((token
-              (cond
-               ((functionp auth-source-xoauth2-creds)
-                (funcall auth-source-xoauth2-creds host user port))
-               ((stringp auth-source-xoauth2-creds)
-                (auth-source-xoauth2--file-creds
-                 auth-source-xoauth2-creds host user port))
-               (t
-                (auth-source-xoauth2--alist-creds host)))))
-    (when-let ((auth-url (plist-get token :auth-url))
-               (token-url (plist-get token :token-url))
-               (scope (plist-get token :scope))
-               (client-id (plist-get token :client-id))
-               (client-secret (plist-get token :client-secret)))
+  (when-let* ((token
+               (cond
+                ((functionp auth-source-xoauth2-creds)
+                 (funcall auth-source-xoauth2-creds host user port))
+                ((stringp auth-source-xoauth2-creds)
+                 (auth-source-xoauth2--file-creds
+                  auth-source-xoauth2-creds host user port))
+                (t
+                 (auth-source-xoauth2--alist-creds host)))))
+    (when-let* ((auth-url (plist-get token :auth-url))
+                (token-url (plist-get token :token-url))
+                (scope (plist-get token :scope))
+                (client-id (plist-get token :client-id))
+                (client-secret (plist-get token :client-secret)))
       (list :host host :port port :user user
             :secret (lambda ()
                       (let* ((key (or user host))
