@@ -214,7 +214,6 @@ HOST, USER, and PORT."
 
 (defvar auth-source-xoauth2-backend
   (auth-source-backend
-   (when (<= emacs-major-version 25) "xoauth2")
    :source "." ;; not used
    :type 'xoauth2
    :search-function #'auth-source-xoauth2-search)
