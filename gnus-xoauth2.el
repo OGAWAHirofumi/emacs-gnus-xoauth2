@@ -32,7 +32,7 @@
 ;;      (nnimap-user "foo@gmail.com")
 ;;      (nnimap-address "imap.gmail.com")
 ;;      (nnimap-server-port "imaps")
-;;      (nnimap-stream ssl))
+;;      (nnimap-stream tls))
 ;;
 ;; And "pass edit foo.gmail.com.gpg" to store OAUTH2 information to
 ;; password-store.
