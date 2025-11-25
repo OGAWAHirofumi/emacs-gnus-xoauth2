@@ -137,12 +137,13 @@ scope: <value>
 which are used to build and return the property list required by
 `auth-source-xoauth2-creds'."
   (let ((auth-sources (remove 'xoauth2 auth-sources)))
-    (nth 0
-         (or
-          (auth-source-search :host host :user user :port port
-                              :require '(:auth-url :token-url :scope))
-          (auth-source-search :host host :port port
-                              :require '(:auth-url :token-url :scope))))))
+    (car
+     (or
+      (auth-source-search :host host :user user :port port
+                          :require '(:auth-url :token-url :scope))
+      (and (or (consp user) (stringp user))
+           (auth-source-search :host host :port port
+                               :require '(:auth-url :token-url :scope)))))))
 
 (defun auth-source-xoauth2--search-one-by-one (func hosts user ports)
   "Get the XOAUTH2 authentication data for the given HOSTS, USER, and PORTS.
