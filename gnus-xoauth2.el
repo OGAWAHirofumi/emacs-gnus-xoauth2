@@ -139,8 +139,8 @@ which are used to build and return the property list required by
   (when-let* ((auth-sources (remove 'xoauth2 auth-sources))
               (plist (car (auth-source-search
                            :host host :port port
-                           :require '(:host :user :port :auth-url
-                                            :token-url :scope)))))
+                           :require '(:host :user :port :secret
+                                            :auth-url :token-url :scope)))))
     ;; convert `plist' for xoauth2
     (list :host (plist-get plist :host)
           :port (plist-get plist :port)
