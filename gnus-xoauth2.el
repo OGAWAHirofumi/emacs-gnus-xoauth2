@@ -128,11 +128,11 @@ This function retrieve by `auth-source-search' that is matching HOST,
 USER, and PORT.  This entry should contain the following key-value
 pairs:
 
-<client-secret>
-username: <client-id>
-auth-url: <value>
-token-url: <value>
-scope: <value>
+:secret <client-secret>
+:user <client-id>
+:auth-url <value>
+:token-url <value>
+:scope <value>
 
 which are used to build and return the property list required by
 `auth-source-xoauth2-creds'."
