@@ -74,7 +74,7 @@
 (require 'oauth2-ext)
 
 (defgroup gnus-xoauth2 nil
-  "XOAUTH2 support for gnus"
+  "XOAUTH2 support for gnus."
   :version "28.1"
   :group 'mail)
 
@@ -85,7 +85,7 @@
 ;;      :scope "https://mail.google.com/"
 ;;      :client-id "<client-id.apps.googleusercontent.com>"
 ;;      :client-secret "<client-secret>"))))
-(defcustom auth-source-xoauth2-creds #'auth-source-xoauth2-pass-creds
+(defcustom auth-source-xoauth2-creds #'auth-source-xoauth2-creds-search
   "A property list containing values for the following XOAuth2 keys:
 :auth-url, :token-url, :scope, :client-id, and :client-secret.
 
@@ -114,13 +114,59 @@ If this is set to a function, it will be called with HOST, USER, and
 PORT values, and should return the respective property list.
 
 This package provides a function that retrieves the values from a
-password-store.  See `auth-source-xoauth2-pass-creds' for details."
-  :type '(choice file function sexp))
+password-store.  See `auth-source-xoauth2-creds-search' and
+`auth-source-xoauth2-creds-pass' for details."
+  :type '(choice file
+                 function
+                 sexp
+                 (function-item auth-source-xoauth2-creds-search)
+                 (function-item auth-source-xoauth2-creds-pass)))
 
-(defun auth-source-xoauth2-pass-creds (host user port)
+(defun auth-source-xoauth2-creds-search (host user port)
+  "Retrieve a XOAUTH2 access token using `auth-source-search'.
+This function retrieve by `auth-source-search' that is matching HOST,
+USER, and PORT.  This entry should contain the following key-value
+pairs:
+
+<client-secret>
+username: <client-id>
+auth-url: <value>
+token-url: <value>
+scope: <value>
+
+which are used to build and return the property list required by
+`auth-source-xoauth2-creds'."
+  (let ((auth-sources (remove 'xoauth2 auth-sources)))
+    (nth 0
+         (or
+          (auth-source-search :host host :user user :port port
+                              :require '(:auth-url :token-url :scope))
+          (auth-source-search :host host :port port
+                              :require '(:auth-url :token-url :scope))))))
+
+(defun auth-source-xoauth2--search-one-by-one (func hosts user ports)
+  "Get the XOAUTH2 authentication data for the given HOSTS, USER, and PORTS.
+
+This helps to search function FUNC that don't support multiple hosts and
+ports at once."
+  (let* ((hosts (if (and hosts (listp hosts)) hosts `(,hosts)))
+         (ports (if (and ports (listp ports)) ports `(,ports))))
+    (catch 'match
+      (dolist (host hosts)
+        (dolist (port ports)
+          (let ((plist (funcall func host user port)))
+            (when plist
+              (dolist (var `((:host . ,host)
+                             (:user . ,user)
+                             (:port . ,port)))
+                (when (stringp (cdr var))
+                  (setq plist (plist-put plist (car var) (cdr var)))))
+              (throw 'match plist))))))))
+
+(defun auth-source-xoauth2-creds-pass (hosts user ports)
   "Retrieve a XOAUTH2 access token using `auth-source-pass'.
-This function retrieve a password-store entry matching HOST,
-USER, and PORT.  This entry should contain the following
+This function retrieve a password-store entry matching HOSTS,
+USER, and PORTS.  This entry should contain the following
 key-value pairs:
 
 <client-secret>
@@ -131,68 +177,54 @@ scope: <value>
 
 which are used to build and return the property list required by
 `auth-source-xoauth2-creds'."
-  (when-let* ((entry-data (auth-source-pass--find-match host user port)))
-    (when-let* ((auth-url (auth-source-pass--get-attr "auth-url" entry-data))
-                (token-url (auth-source-pass--get-attr "token-url" entry-data))
-                (scope (auth-source-pass--get-attr "scope" entry-data))
-                (client-id (auth-source-pass--get-attr "user" entry-data))
-                (client-secret (auth-source-pass--get-attr 'secret entry-data)))
-      (list :auth-url auth-url :token-url token-url :scope scope
-            :client-id client-id :client-secret client-secret))))
+  (auth-source-xoauth2--search-one-by-one
+   (lambda (host user port)
+     (when-let* ((entry-data (auth-source-pass--find-match host user port)))
+       (when-let* ((auth-url
+                    (auth-source-pass--get-attr "auth-url" entry-data))
+                   (token-url
+                    (auth-source-pass--get-attr "token-url" entry-data))
+                   (scope
+                    (auth-source-pass--get-attr "scope" entry-data))
+                   (client-id
+                    (auth-source-pass--get-attr "user" entry-data))
+                   (client-secret
+                    (auth-source-pass--get-attr 'secret entry-data)))
+         (list :auth-url auth-url :token-url token-url :scope scope
+               :client-id client-id :client-secret client-secret))))
+   hosts user ports))
 
-(defun auth-source-xoauth2--file-creds (file host user port)
-  "Load FILE and evaluate it, matching entries to HOST, USER, and PORT."
-  (when (not (string= "gpg" (file-name-extension file)))
-    (error "The auth-source-xoauth2-creds file must be GPG encrypted"))
-  (when-let*
-      ((creds (condition-case err
-                  (eval (with-temp-buffer
-                          (insert-file-contents file)
-                          (goto-char (point-min))
-                          (read (current-buffer)))
-                        t)
-                (error
-                 "Error parsing contents of %s: %s"
-                 file (error-message-string err)))))
-    (cond
-     ((hash-table-p creds)
-      (message "Searching hash table for (%S %S %S)" host user port)
-      (gethash `(,host ,user ,port) creds))
-     (creds))))
+(defun auth-source-xoauth2--file-creds (file hosts user ports)
+  "Load FILE and evaluate it, matching entries to HOSTS, USER, and PORTS."
+  (let ((file (expand-file-name file)))
+    (when (not (string= "gpg" (file-name-extension file)))
+      (error "The auth-source-xoauth2-creds file must be GPG encrypted"))
+    (when-let*
+        ((creds (condition-case err
+                    (eval (with-temp-buffer
+                            (insert-file-contents file)
+                            (goto-char (point-min))
+                            (read (current-buffer)))
+                          t)
+                  (error
+                   "Error parsing contents of %s: %s"
+                   file (error-message-string err)))))
+      (cond
+       ((hash-table-p creds)
+        (auth-source-xoauth2--search-one-by-one
+         (lambda (host user port)
+           (message "Searching hash table for (%S %S %S)" host user port)
+           (gethash (list host user port) creds))
+         hosts user ports))
+       (creds)))))
 
-(defun auth-source-xoauth2--alist-creds (host)
-  "Matching entries to HOST from alist."
-  (when-let* ((entry (assoc host auth-source-xoauth2-creds)))
-    (cadr entry)))
-
-(cl-defun auth-source-xoauth2--search (host user port)
-  "Get the XOAUTH2 authentication data for the given HOST, USER, and PORT."
-  (when-let* ((token
-               (cond
-                ((functionp auth-source-xoauth2-creds)
-                 (funcall auth-source-xoauth2-creds host user port))
-                ((stringp auth-source-xoauth2-creds)
-                 (auth-source-xoauth2--file-creds
-                  auth-source-xoauth2-creds host user port))
-                (t
-                 (auth-source-xoauth2--alist-creds host)))))
-    (when-let* ((auth-url (plist-get token :auth-url))
-                (token-url (plist-get token :token-url))
-                (scope (plist-get token :scope))
-                (client-id (plist-get token :client-id))
-                (client-secret (plist-get token :client-secret)))
-      (list :host host :port port :user user
-            :secret (lambda ()
-                      (let* ((key (or user host))
-                             (oauth2-httpd-response-title
-                              (format "OAuth2 response for %s" key))
-                             (session (oauth2-ext-session-make
-                                       client-id client-secret auth-url
-                                       token-url scope key)))
-                        (when user
-                          (setf (oauth2-ext-session-login-hint session) user))
-                        (message "Getting OAuth2 token for %s..." key)
-                        (oauth2-ext-access-token session)))))))
+(defun auth-source-xoauth2--alist-creds (hosts user ports)
+  "Matching entries to HOSTS, USER, and PORTS from alist."
+  (auth-source-xoauth2--search-one-by-one
+   (lambda (host _user _port)
+     (when-let* ((entry (assoc host auth-source-xoauth2-creds)))
+       (cadr entry)))
+   hosts user ports))
 
 (cl-defun auth-source-xoauth2-search (&rest spec
                                             &key backend type host user port
@@ -203,14 +235,37 @@ HOST, USER, and PORT."
   ;; just in case, check that the type is correct (null or same as the backend)
   (cl-assert (or (null type) (eq type (oref backend type)))
              t "Invalid xoauth2 search: %s %s")
-  (let* ((hosts (if (and host (listp host)) host `(,host)))
-         (ports (if (and port (listp port)) port `(,port))))
-    (catch 'match
-      (dolist (host hosts)
-        (dolist (port ports)
-          (let ((match (auth-source-xoauth2--search host user port)))
-            (when match
-              (throw 'match `(,match)))))))))
+
+  (when-let* ((token
+               (cond
+                ((functionp auth-source-xoauth2-creds)
+                 (funcall auth-source-xoauth2-creds host user port))
+                ((stringp auth-source-xoauth2-creds)
+                 (auth-source-xoauth2--file-creds
+                  auth-source-xoauth2-creds host user port))
+                (t
+                 (auth-source-xoauth2--alist-creds host user port))))
+              (host (plist-get token :host))
+              (port (plist-get token :port))
+              (user (plist-get token :user))
+              (auth-url (plist-get token :auth-url))
+              (token-url (plist-get token :token-url))
+              (scope (plist-get token :scope))
+              (client-id (plist-get token :client-id))
+              (client-secret (plist-get token :client-secret)))
+    (list
+     (list :host host :port port :user user
+           :secret (lambda ()
+                     (let* ((key (or user host))
+                            (oauth2-httpd-response-title
+                             (format "OAuth2 response for %s" key))
+                            (session (oauth2-ext-session-make
+                                      client-id client-secret auth-url
+                                      token-url scope key)))
+                       (when user
+                         (setf (oauth2-ext-session-login-hint session) user))
+                       (message "Getting OAuth2 token for %s..." key)
+                       (oauth2-ext-access-token session)))))))
 
 (defvar auth-source-xoauth2-backend
   (auth-source-backend
