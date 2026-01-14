@@ -70,7 +70,6 @@
 ;;; Code:
 
 (require 'cl-lib)
-(require 'auth-source-pass)
 (require 'oauth2-ext)
 
 (defgroup gnus-xoauth2 nil
@@ -184,6 +183,7 @@ scope: <value>
 
 which are used to build and return the property list required by
 `auth-source-xoauth2-creds'."
+  (require 'auth-source-pass)
   (auth-source-xoauth2--search-one-by-one
    (lambda (host user port)
      (when-let* ((entry-data (auth-source-pass--find-match host user port)))

@@ -30,7 +30,6 @@
 (eval-when-compile (require 'subr-x))
 (require 'url)
 (require 'plstore)
-(require 'auth-source-pass)
 
 (defgroup oauth2-ext nil
   "Extending oauth2.el."
@@ -43,6 +42,8 @@
 
 (defun oauth2-ext-pass-gpg-id ()
   "Get gpg id from password-store's .gpg-id."
+  (defvar auth-source-pass-filename)
+  (require 'auth-source-pass)
   (let ((gpg-id (concat auth-source-pass-filename "/.gpg-id")))
     (when (file-exists-p gpg-id)
       (with-temp-buffer
